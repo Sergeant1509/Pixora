@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getCountFromServer,
+  increment,
   onSnapshot,
   serverTimestamp,
   writeBatch
@@ -111,6 +112,16 @@ export async function followUser(profile, targetUser) {
     createdAt: now
   });
 
+  batch.update(doc(db, 'users', profile.uid), {
+    followingCount: increment(1),
+    updatedAt: now
+  });
+
+  batch.update(doc(db, 'users', targetUser.uid), {
+    followersCount: increment(1),
+    updatedAt: now
+  });
+
   await batch.commit();
 }
 
@@ -120,6 +131,14 @@ export async function unfollowUser(profile, targetUser) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', profile.uid, 'following', targetUser.uid));
   batch.delete(doc(db, 'users', targetUser.uid, 'followers', profile.uid));
+  batch.update(doc(db, 'users', profile.uid), {
+    followingCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
+  batch.update(doc(db, 'users', targetUser.uid), {
+    followersCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
   await batch.commit();
 }
 
@@ -130,5 +149,13 @@ export async function removeFollower(profile, followerUser) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', profile.uid, 'followers', followerUser.uid));
   batch.delete(doc(db, 'users', followerUser.uid, 'following', profile.uid));
+  batch.update(doc(db, 'users', profile.uid), {
+    followersCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
+  batch.update(doc(db, 'users', followerUser.uid), {
+    followingCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
   await batch.commit();
 }

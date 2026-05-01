@@ -39,6 +39,46 @@ function formatCount(value = 0) {
   return String(number);
 }
 
+
+function getFeedSkipKey() {
+  return state.profile?.uid ? `pixora-feed-suggestions-skipped:${state.profile.uid}` : '';
+}
+
+function loadFeedSuggestionPreference() {
+  const key = getFeedSkipKey();
+  state.feedSuggestionsSkipped = key ? localStorage.getItem(key) === 'true' : false;
+}
+
+function saveFeedSuggestionPreference(value) {
+  const key = getFeedSkipKey();
+  state.feedSuggestionsSkipped = Boolean(value);
+  if (key) localStorage.setItem(key, String(Boolean(value)));
+}
+
+function getSuggestedFollowUsers(limit = 5) {
+  if (!state.profile) return [];
+
+  return state.users
+    .filter((user) => user.uid && user.uid !== state.profile.uid)
+    .filter((user) => !state.following.has(user.uid) && !state.blocked.has(user.uid))
+    .sort((a, b) => {
+      const followersA = Number(a.followersCount || a.followerCount || 0);
+      const followersB = Number(b.followersCount || b.followerCount || 0);
+      if (followersB !== followersA) return followersB - followersA;
+      return String(a.displayName || a.username || '').localeCompare(String(b.displayName || b.username || ''));
+    })
+    .slice(0, limit);
+}
+
+function getFollowingFeedPosts() {
+  if (!state.profile) return [];
+
+  return state.posts.filter((post) => {
+    if (state.blocked.has(post.authorId)) return false;
+    return state.following.has(post.authorId);
+  });
+}
+
 const state = {
   authUser: null,
   profile: null,
@@ -47,6 +87,8 @@ const state = {
   posts: [],
   following: new Set(),
   followers: new Set(),
+  feedSuggestionSelection: new Set(),
+  feedSuggestionsSkipped: false,
   conversations: [],
   notifications: [],
   blocked: new Set(),
@@ -343,6 +385,7 @@ function attachRealtimeListeners(uid) {
       }
 
       state.profile = profile;
+      loadFeedSuggestionPreference();
       state.profileCache.set(profile.uid, profile);
       if (!state.viewingProfileUid) state.viewingProfileUid = profile.uid;
       renderCurrentUser();
@@ -350,6 +393,7 @@ function attachRealtimeListeners(uid) {
       renderPeople();
       renderConversations();
       renderProfilePanel();
+      renderPosts();
     })
   );
 
@@ -370,6 +414,7 @@ function attachRealtimeListeners(uid) {
       renderPeople();
       renderConversations();
       renderProfilePanel();
+      renderPosts();
     })
   );
 
@@ -380,6 +425,7 @@ function attachRealtimeListeners(uid) {
       renderPeople();
       renderProfilePanel();
       renderSettingsPanel();
+      renderPosts();
     })
   );
 
@@ -436,6 +482,8 @@ function cleanupRealtimeListeners() {
   state.posts = [];
   state.following = new Set();
   state.followers = new Set();
+  state.feedSuggestionSelection = new Set();
+  state.feedSuggestionsSkipped = false;
   state.conversations = [];
   state.notifications = [];
   state.blocked = new Set();
@@ -708,10 +756,115 @@ function renderFollowModal() {
 }
 
 function renderPosts() {
-  const visiblePosts = state.posts.filter((post) => !state.blocked.has(post.authorId));
+  if (!views.postsList || !state.profile) return;
+
+  const visiblePosts = getFollowingFeedPosts();
+
+  if (!state.following.size && !visiblePosts.length && !state.feedSuggestionsSkipped) {
+    renderFollowStarterPanel();
+    return;
+  }
+
   renderPostsInto(views.postsList, visiblePosts, {
-    emptyTitle: 'No posts yet',
-    emptyBody: 'Create the first post and it will appear globally for every account.'
+    emptyTitle: state.following.size ? 'No posts from people you follow yet' : 'Follow some accounts to show posts',
+    emptyBody: state.following.size
+      ? 'When the people you follow publish something, their posts will appear here.'
+      : 'Your home feed only shows posts from accounts you follow. Explore creators or use the suggestions below to start.'
+  });
+}
+
+function renderFollowStarterPanel() {
+  const suggestions = getSuggestedFollowUsers(5);
+
+  if (!suggestions.length) {
+    views.postsList.innerHTML = emptyState('Follow some accounts to show posts', 'No suggestions are available yet. Open Discover when more people join Pixora.');
+    return;
+  }
+
+  if (!state.feedSuggestionSelection.size) {
+    state.feedSuggestionSelection = new Set(suggestions.map((user) => user.uid));
+  } else {
+    state.feedSuggestionSelection = new Set([...state.feedSuggestionSelection].filter((uid) => suggestions.some((user) => user.uid === uid)));
+  }
+
+  views.postsList.innerHTML = `
+    <section class="follow-onboarding glass-card reveal-up">
+      <div class="follow-onboarding-copy">
+        <span class="muted-label">Build your feed</span>
+        <h3>Follow some accounts to show posts</h3>
+        <p>Your feed is now personal. It only shows posts from people you follow, so start with a few popular profiles.</p>
+      </div>
+      <div class="suggested-follow-list">
+        ${suggestions.map((user) => {
+          const selected = state.feedSuggestionSelection.has(user.uid);
+          return `
+            <article class="suggested-follow-card ${selected ? 'selected' : ''}" data-suggested-user="${escapeHTML(user.uid)}">
+              <button class="suggested-person as-button" type="button" data-suggested-profile="${escapeHTML(user.uid)}">
+                ${avatarTemplate(user)}
+                <span>
+                  <strong>${escapeHTML(user.displayName || 'User')}</strong>
+                  <small>@${escapeHTML(user.username || 'user')} · ${formatCount(user.followersCount || 0)} followers</small>
+                </span>
+              </button>
+              <button class="suggest-toggle ${selected ? 'selected' : ''}" type="button" data-suggest-toggle="${escapeHTML(user.uid)}">${selected ? 'Selected' : 'Select'}</button>
+            </article>
+          `;
+        }).join('')}
+      </div>
+      <div class="follow-onboarding-actions">
+        <button class="primary-btn" type="button" data-continue-following>Continue with following</button>
+        <button class="ghost-btn" type="button" data-skip-following>Skip for now</button>
+      </div>
+      <p class="soft-note">You can follow or unfollow people anytime from Discover or their profile.</p>
+    </section>
+  `;
+
+  bindFollowStarterActions();
+}
+
+function bindFollowStarterActions() {
+  $$('[data-suggested-profile]', views.postsList).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.suggestedProfile));
+  });
+
+  $$('[data-suggest-toggle]', views.postsList).forEach((button) => {
+    button.addEventListener('click', () => {
+      const uid = button.dataset.suggestToggle;
+      if (state.feedSuggestionSelection.has(uid)) state.feedSuggestionSelection.delete(uid);
+      else state.feedSuggestionSelection.add(uid);
+      renderFollowStarterPanel();
+    });
+  });
+
+  $('[data-skip-following]', views.postsList)?.addEventListener('click', () => {
+    saveFeedSuggestionPreference(true);
+    renderPosts();
+  });
+
+  $('[data-continue-following]', views.postsList)?.addEventListener('click', async (event) => {
+    const selectedUsers = [...state.feedSuggestionSelection]
+      .map((uid) => findUser(uid))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (!selectedUsers.length) {
+      showToast('Select at least one account or skip for now.', 'error');
+      return;
+    }
+
+    const button = event.currentTarget;
+    setButtonLoading(button, true, 'Following...');
+
+    try {
+      await Promise.all(selectedUsers.map((user) => followUser(state.profile, user)));
+      saveFeedSuggestionPreference(true);
+      state.feedSuggestionSelection.clear();
+      showToast('Your feed is ready.');
+    } catch (error) {
+      showToast(friendlyError(error), 'error');
+    } finally {
+      setButtonLoading(button, false);
+    }
   });
 }
 

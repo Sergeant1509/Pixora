@@ -31,7 +31,10 @@ service cloud.firestore {
             'lastReportedAt',
             'bannedUntil',
             'banReason',
-            'lastBanAt'
+            'lastBanAt',
+            'followersCount',
+            'followingCount',
+            'updatedAt'
           ]));
       allow delete: if isSelf(uid);
 

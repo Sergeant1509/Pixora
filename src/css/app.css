@@ -2302,3 +2302,129 @@ button.profile-stat:hover {
     display: none;
   }
 }
+
+
+/* Following-only feed starter */
+.follow-onboarding {
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border-radius: var(--radius-xl);
+  display: grid;
+  gap: 1.15rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.follow-onboarding::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 15% 5%, rgba(128, 92, 255, 0.24), transparent 35%),
+    radial-gradient(circle at 90% 10%, rgba(17, 201, 231, 0.2), transparent 35%);
+  pointer-events: none;
+}
+
+.follow-onboarding > * {
+  position: relative;
+  z-index: 1;
+}
+
+.follow-onboarding-copy h3 {
+  margin: .25rem 0 .35rem;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.follow-onboarding-copy p {
+  max-width: 680px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.suggested-follow-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .85rem;
+}
+
+.suggested-follow-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.055);
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+
+.suggested-follow-card:hover,
+.suggested-follow-card.selected {
+  transform: translateY(-2px);
+  border-color: rgba(123, 92, 255, .55);
+  background: rgba(123, 92, 255, .12);
+}
+
+.suggested-person {
+  display: inline-flex;
+  align-items: center;
+  gap: .7rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.suggested-person span {
+  display: grid;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.suggested-person strong,
+.suggested-person small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggested-person small {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.suggest-toggle {
+  border: 0;
+  border-radius: 999px;
+  padding: .55rem .8rem;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, .1);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.suggest-toggle.selected {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.follow-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+}
+
+@media (max-width: 640px) {
+  .suggested-follow-list {
+    grid-template-columns: 1fr;
+  }
+
+  .suggested-follow-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .suggest-toggle,
+  .follow-onboarding-actions .primary-btn,
+  .follow-onboarding-actions .ghost-btn {
+    width: 100%;
+  }
+}

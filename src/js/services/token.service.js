@@ -23,7 +23,9 @@ export function normalizeUser(user = {}) {
     email: user.email || '',
     bio: user.bio || '',
     avatarUrl: user.avatarUrl || user.avatar || user.photoURL || '',
-    coverUrl: user.coverUrl || user.cover || ''
+    coverUrl: user.coverUrl || user.cover || '',
+    followersCount: Number(user.followersCount || user.followerCount || 0),
+    followingCount: Number(user.followingCount || 0)
   };
 }
 
