@@ -20,6 +20,13 @@ import { friendlyError, showToast } from './ui/toast.js';
 const emojiSet = ['😀', '😂', '😍', '🔥', '❤️', '👏', '✨', '😭', '😎', '🙏', '💯', '🎉', '😊', '🤝', '🌟', '💬'];
 const giphyKey = import.meta.env.VITE_GIPHY_API_KEY || '';
 
+function cleanInput(value = '', maxLength = 80) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
 const state = {
   authUser: null,
   profile: null,
@@ -255,6 +262,7 @@ async function handleSendMessage(event) {
     });
     views.messageForm.reset();
     hideChatTools();
+    scrollMessagesToBottom({ smooth: true });
   } catch (error) {
     showToast(friendlyError(error), 'error');
   } finally {
@@ -829,9 +837,26 @@ async function activateConversation(conversationId, otherUser) {
   state.unsubscribeMessages = listenToMessages(conversationId, renderMessages);
 }
 
+function scrollMessagesToBottom(options = {}) {
+  const list = views.messagesList;
+  if (!list) return;
+
+  const behavior = options.smooth ? 'smooth' : 'auto';
+  const scroll = () => {
+    list.scrollTo({ top: list.scrollHeight, behavior });
+  };
+
+  requestAnimationFrame(() => {
+    scroll();
+    setTimeout(scroll, 80);
+    setTimeout(scroll, 260);
+  });
+}
+
 function renderMessages(messages) {
   if (!messages.length) {
     views.messagesList.innerHTML = emptyState('No messages yet', 'Send the first message to start this chat.');
+    scrollMessagesToBottom();
     return;
   }
 
@@ -846,7 +871,14 @@ function renderMessages(messages) {
       }
     });
   });
-  views.messagesList.scrollTop = views.messagesList.scrollHeight;
+
+  $$('img', views.messagesList).forEach((image) => {
+    if (!image.complete) {
+      image.addEventListener('load', () => scrollMessagesToBottom(), { once: true });
+    }
+  });
+
+  scrollMessagesToBottom();
 }
 
 function messageTemplate(message) {
@@ -913,40 +945,40 @@ function renderGifPanel() {
       <input id="gif-search" type="search" placeholder="Search GIFs" autocomplete="off" />
       <button id="gif-search-btn" class="ghost-btn" type="button">Search</button>
     </div>
-    <div id="gif-results" class="gif-results">
-      <span class="soft-note">Type a word like happy, love, teddy, funny...</span>
-    </div>
+    <div id="gif-results" class="gif-results"><span class="soft-note">Type a word like teddy, happy, funny, love...</span></div>
   `;
 
   const input = $('#gif-search', views.chatTools);
   const button = $('#gif-search-btn', views.chatTools);
 
-  button?.addEventListener('click', () => {
-    loadGifs(input.value);
-  });
+  const runSearch = () => loadGifs(input?.value || 'reaction');
+
+  button?.addEventListener('click', runSearch);
 
   input?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      loadGifs(input.value);
+      runSearch();
     }
   });
 
   let gifTimer;
   input?.addEventListener('input', () => {
     clearTimeout(gifTimer);
-
     gifTimer = setTimeout(() => {
-      if (input.value.trim().length >= 2) {
-        loadGifs(input.value);
-      }
-    }, 500);
+      const value = cleanInput(input.value, 40);
+      if (value.length >= 2) loadGifs(value);
+    }, 450);
   });
+
+  input?.focus();
 }
 
 async function loadGifs(queryText) {
   const results = $('#gif-results', views.chatTools);
   const query = cleanInput(queryText, 40);
+
+  if (!results) return;
 
   if (!query) {
     results.innerHTML = '<span class="soft-note">Search for a GIF to send.</span>';
@@ -954,7 +986,7 @@ async function loadGifs(queryText) {
   }
 
   if (!giphyKey) {
-    results.innerHTML = '<span class="soft-note">Missing GIPHY API key. Add VITE_GIPHY_API_KEY in .env, then rebuild and deploy.</span>';
+    results.innerHTML = '<span class="soft-note">Missing GIPHY API key. Add VITE_GIPHY_API_KEY in .env, then run npm run build and firebase deploy.</span>';
     return;
   }
 
@@ -965,7 +997,7 @@ async function loadGifs(queryText) {
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`GIPHY request failed: ${response.status}`);
+      throw new Error(`GIPHY request failed with status ${response.status}`);
     }
 
     const data = await response.json();
@@ -977,12 +1009,7 @@ async function loadGifs(queryText) {
     }
 
     results.innerHTML = gifs.map((gif) => {
-      const src =
-        gif.images?.fixed_height_small?.url ||
-        gif.images?.downsized_medium?.url ||
-        gif.images?.original?.url ||
-        '';
-
+      const src = gif.images?.fixed_height_small?.url || gif.images?.downsized_medium?.url || gif.images?.original?.url || '';
       if (!src) return '';
 
       return `
@@ -993,13 +1020,11 @@ async function loadGifs(queryText) {
     }).join('');
 
     $$('[data-gif-url]', results).forEach((button) => {
-      button.addEventListener('click', () => {
-        sendGif(button.dataset.gifUrl, button.dataset.gifTitle);
-      });
+      button.addEventListener('click', () => sendGif(button.dataset.gifUrl, button.dataset.gifTitle));
     });
   } catch (error) {
     console.error(error);
-    results.innerHTML = '<span class="soft-note">GIF search failed. Check your GIPHY API key and browser console.</span>';
+    results.innerHTML = '<span class="soft-note">GIF search failed. Check your GIPHY key, internet, and browser console.</span>';
   }
 }
 
@@ -1012,6 +1037,7 @@ async function sendGif(url, title) {
       gifTitle: title || 'GIF'
     });
     hideChatTools();
+    scrollMessagesToBottom({ smooth: true });
   } catch (error) {
     showToast(friendlyError(error), 'error');
   }

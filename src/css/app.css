@@ -1785,3 +1785,62 @@
     min-width: 46px;
   }
 }
+
+/* Chat scroll fix: keep the messenger fixed and only scroll messages */
+#messages-view.view.active {
+  min-height: 0;
+  overflow: hidden;
+}
+
+#messages-view .messenger {
+  height: calc(100dvh - 128px);
+  min-height: 520px;
+  max-height: calc(100dvh - 128px);
+  overflow: hidden;
+}
+
+#messages-view .chat-panel,
+#messages-view .chat-active {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#messages-view .chat-active {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+
+#messages-view .messages-list {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scroll-behavior: smooth;
+}
+
+#messages-view .message-bubble {
+  flex: 0 0 auto;
+}
+
+#messages-view .message-form {
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  #messages-view .messenger {
+    height: calc(100dvh - 150px);
+    min-height: 0;
+    max-height: calc(100dvh - 150px);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  #messages-view .chat-sidebar {
+    max-height: 118px;
+  }
+
+  #messages-view .messages-list {
+    padding: 0.75rem;
+  }
+}
