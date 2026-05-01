@@ -22,7 +22,8 @@ export function normalizeUser(user = {}) {
     usernameLower: username,
     email: user.email || '',
     bio: user.bio || '',
-    avatarUrl: user.avatarUrl || user.avatar || user.photoURL || ''
+    avatarUrl: user.avatarUrl || user.avatar || user.photoURL || '',
+    coverUrl: user.coverUrl || user.cover || ''
   };
 }
 

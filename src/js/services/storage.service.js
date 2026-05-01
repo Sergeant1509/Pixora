@@ -1,9 +1,11 @@
 const MAX_POST_IMAGE_BYTES = 340 * 1024;
 const MAX_AVATAR_IMAGE_BYTES = 170 * 1024;
+const MAX_COVER_IMAGE_BYTES = 380 * 1024;
 const MAX_MESSAGE_IMAGE_BYTES = 240 * 1024;
 
 const POST_IMAGE_SETTINGS = { maxWidth: 1180, maxHeight: 1180, quality: 0.72, maxBytes: MAX_POST_IMAGE_BYTES };
 const AVATAR_IMAGE_SETTINGS = { maxWidth: 360, maxHeight: 360, quality: 0.72, maxBytes: MAX_AVATAR_IMAGE_BYTES };
+const COVER_IMAGE_SETTINGS = { maxWidth: 1500, maxHeight: 620, quality: 0.7, maxBytes: MAX_COVER_IMAGE_BYTES };
 const MESSAGE_IMAGE_SETTINGS = { maxWidth: 980, maxHeight: 980, quality: 0.7, maxBytes: MAX_MESSAGE_IMAGE_BYTES };
 
 export function isImageFile(file) {
@@ -19,6 +21,18 @@ export async function uploadPostMedia(file) {
 
   const dataUrl = await compressImageToDataUrl(file, POST_IMAGE_SETTINGS);
   return { url: dataUrl, type: 'image', path: 'firestore-inline-image', name: file.name };
+}
+
+export async function uploadCoverImage(fileOrDataUrl) {
+  if (!fileOrDataUrl) return null;
+
+  if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:image/')) {
+    return { url: fileOrDataUrl, type: 'image', path: 'firestore-inline-cover', name: 'cover-image.jpg' };
+  }
+
+  if (!isImageFile(fileOrDataUrl)) throw new Error('Cover image must be an image file.');
+  const dataUrl = await compressImageToDataUrl(fileOrDataUrl, COVER_IMAGE_SETTINGS);
+  return { url: dataUrl, type: 'image', path: 'firestore-inline-cover', name: fileOrDataUrl.name };
 }
 
 export async function uploadMessageImage(file) {

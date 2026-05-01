@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebase.js';
-import { loginWithGoogle, registerUser } from '../services/auth.service.js';
+import { isUsernameAvailable, loginWithGoogle, registerUser, suggestUsernames } from '../services/auth.service.js';
 import { $, setButtonLoading } from '../utils/dom.js';
 import { friendlyError, showToast } from '../ui/toast.js';
 
@@ -15,6 +15,62 @@ onAuthStateChanged(auth, (user) => {
     window.location.replace('/index.html');
   }
 });
+
+const usernameInput = $('#username-input');
+const usernameStatus = $('#username-status');
+const usernameSuggestions = $('#username-suggestions');
+let usernameTimer;
+
+usernameInput?.addEventListener('input', () => {
+  clearTimeout(usernameTimer);
+  const rawValue = usernameInput.value;
+  const value = rawValue.toLowerCase().replace(/[^a-z0-9_.]/g, '').slice(0, 20);
+  if (rawValue !== value) usernameInput.value = value;
+
+  usernameTimer = setTimeout(() => checkUsername(value), 350);
+});
+
+async function checkUsername(username) {
+  if (!usernameStatus || !usernameSuggestions) return;
+
+  usernameSuggestions.innerHTML = '';
+
+  if (!username || username.length < 3) {
+    usernameStatus.textContent = 'Username must be at least 3 characters.';
+    usernameStatus.dataset.state = 'neutral';
+    return;
+  }
+
+  usernameStatus.textContent = 'Checking username...';
+  usernameStatus.dataset.state = 'neutral';
+
+  try {
+    const available = await isUsernameAvailable(username);
+
+    if (available) {
+      usernameStatus.textContent = `@${username} is available.`;
+      usernameStatus.dataset.state = 'available';
+      return;
+    }
+
+    usernameStatus.textContent = `@${username} is already taken.`;
+    usernameStatus.dataset.state = 'taken';
+
+    const suggestions = await suggestUsernames(username, 4);
+    usernameSuggestions.innerHTML = suggestions.map((item) => `<button type="button" data-username-suggestion="${item}">@${item}</button>`).join('');
+
+    usernameSuggestions.querySelectorAll('[data-username-suggestion]').forEach((button) => {
+      button.addEventListener('click', () => {
+        usernameInput.value = button.dataset.usernameSuggestion;
+        checkUsername(usernameInput.value);
+        usernameInput.focus();
+      });
+    });
+  } catch (error) {
+    usernameStatus.textContent = 'Could not check username right now.';
+    usernameStatus.dataset.state = 'taken';
+  }
+}
 
 $('#signup-form')?.addEventListener('submit', async (event) => {
   event.preventDefault();

@@ -21,6 +21,23 @@ export function listenToFollowers(uid, callback) {
 }
 
 
+export function listenToFollowList(uid, type = 'followers', callback) {
+  if (!uid || !['followers', 'following'].includes(type)) {
+    callback([]);
+    return () => {};
+  }
+
+  return onSnapshot(collection(db, 'users', uid, type), (snapshot) => {
+    const rows = snapshot.docs
+      .map((row) => ({ uid: row.id, ...row.data() }))
+      .filter((user) => user.uid)
+      .sort((a, b) => String(a.displayName || a.username || '').localeCompare(String(b.displayName || b.username || '')));
+
+    callback(rows);
+  }, () => callback([]));
+}
+
+
 export function listenToFollowStats(uid, callback) {
   if (!uid) {
     callback({ uid: '', followers: 0, following: 0 });
@@ -103,5 +120,15 @@ export async function unfollowUser(profile, targetUser) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', profile.uid, 'following', targetUser.uid));
   batch.delete(doc(db, 'users', targetUser.uid, 'followers', profile.uid));
+  await batch.commit();
+}
+
+
+export async function removeFollower(profile, followerUser) {
+  if (!profile?.uid || !followerUser?.uid || profile.uid === followerUser.uid) return;
+
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'users', profile.uid, 'followers', followerUser.uid));
+  batch.delete(doc(db, 'users', followerUser.uid, 'following', profile.uid));
   await batch.commit();
 }

@@ -1,18 +1,23 @@
 import { deleteCurrentUserAccount, listenToAuth, logoutUser } from './services/auth.service.js';
-import { getUserById, listenToUser, listenToUsers, updateUserProfile } from './services/user.service.js';
+import { getUserById, getUserByUsername, listenToUser, listenToUsers, updateUserProfile } from './services/user.service.js';
 import {
   addComment,
+  updateComment,
+  deleteComment,
   createPost,
   deletePost,
   increaseShareCount,
   listenToComments,
   listenToPosts,
   toggleLike,
+  toggleCommentLike,
   toggleSave
 } from './services/post.service.js';
-import { followUser, getFollowStats, listenToFollowers, listenToFollowing, listenToFollowStats, unfollowUser } from './services/social.service.js';
+import { followUser, getFollowStats, listenToFollowers, listenToFollowing, listenToFollowList, listenToFollowStats, removeFollower, unfollowUser } from './services/social.service.js';
 import { listenToConversations, listenToMessages, openConversation, sendMessage } from './services/chat.service.js';
-import { cropImageFileToDataUrl, uploadAvatar, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
+import { listenToNotifications, markNotificationsRead, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
+import { cropImageFileToDataUrl, uploadAvatar, uploadCoverImage, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
+import { REPORT_GROUPS, banMessage, blockUser, getBanInfo, listenToBlocked, registerContentViolation, scanContent, submitReport } from './services/moderation.service.js';
 import { $, $$, avatarTemplate, emptyState, escapeHTML, setButtonLoading } from './utils/dom.js';
 import { timeAgo } from './utils/time.js';
 import { friendlyError, showToast } from './ui/toast.js';
@@ -27,6 +32,13 @@ function cleanInput(value = '', maxLength = 80) {
     .slice(0, maxLength);
 }
 
+function formatCount(value = 0) {
+  const number = Number(value || 0);
+  if (number >= 1000000) return `${(number / 1000000).toFixed(number >= 10000000 ? 0 : 1).replace(/\.0$/, '')}M`;
+  if (number >= 1000) return `${(number / 1000).toFixed(number >= 10000 ? 0 : 1).replace(/\.0$/, '')}k`;
+  return String(number);
+}
+
 const state = {
   authUser: null,
   profile: null,
@@ -36,17 +48,24 @@ const state = {
   following: new Set(),
   followers: new Set(),
   conversations: [],
+  notifications: [],
+  blocked: new Set(),
+  commentMenu: { postId: '', commentId: '' },
   activeConversationId: null,
   activeChatUser: null,
   viewingProfileUid: null,
   viewingStats: { uid: '', followers: 0, following: 0 },
+  followModal: { uid: '', type: 'followers', user: null, items: [] },
+  likesModalPost: null,
   currentSharePost: null,
   crop: { file: null, rotation: 0, zoom: 1, offsetX: 0, offsetY: 0 },
   openComments: new Set(),
+  commentsByPost: new Map(),
   commentUnsubscribers: new Map(),
   unsubscribers: [],
   unsubscribeMessages: null,
   unsubscribeProfileStats: null,
+  unsubscribeFollowList: null,
   linkScrolled: false
 };
 
@@ -63,6 +82,9 @@ const views = {
   peopleList: $('#people-list'),
   peopleSearch: $('#people-search'),
   conversationList: $('#conversation-list'),
+  notificationsList: $('#notifications-list'),
+  notificationBadge: $('#notification-badge'),
+  markNotificationsRead: $('#mark-notifications-read'),
   chatEmpty: $('#chat-empty'),
   chatActive: $('#chat-active'),
   chatHeader: $('#chat-header'),
@@ -77,7 +99,9 @@ const views = {
   profilePostsList: $('#profile-posts-list'),
   savedPostsList: $('#saved-posts-list'),
   settingsAvatarPreview: $('#settings-avatar-preview'),
+  settingsCoverPreview: $('#settings-cover-preview'),
   avatarFile: $('#avatar-file'),
+  coverFile: $('#cover-file'),
   cropModal: $('#avatar-crop-modal'),
   cropImage: $('#crop-image'),
   cropZoom: $('#crop-zoom'),
@@ -88,7 +112,14 @@ const views = {
   shareModal: $('#share-modal'),
   shareUsersList: $('#share-users-list'),
   shareLinkField: $('#share-link-field'),
-  copyPostLink: $('#copy-post-link')
+  copyPostLink: $('#copy-post-link'),
+  followModal: $('#follow-modal'),
+  followModalTitle: $('#follow-modal-title'),
+  followModalSubtitle: $('#follow-modal-subtitle'),
+  followList: $('#follow-list'),
+  likesModal: $('#likes-modal'),
+  likesModalTitle: $('#likes-modal-title'),
+  likesList: $('#likes-list')
 };
 
 boot();
@@ -136,6 +167,7 @@ function bindStaticEvents() {
   views.postMediaInput?.addEventListener('change', renderSelectedMediaPreview);
   views.peopleSearch?.addEventListener('input', renderPeople);
   views.avatarFile?.addEventListener('change', openCropperForAvatar);
+  views.coverFile?.addEventListener('change', handleCoverSelect);
   views.cropZoom?.addEventListener('input', updateCropPreview);
   views.cropX?.addEventListener('input', updateCropPreview);
   views.cropY?.addEventListener('input', updateCropPreview);
@@ -143,10 +175,22 @@ function bindStaticEvents() {
   views.saveCrop?.addEventListener('click', saveCroppedAvatar);
   $$('[data-close-crop]').forEach((button) => button.addEventListener('click', closeCropModal));
   $$('[data-close-share]').forEach((button) => button.addEventListener('click', closeShareModal));
+  $$('[data-close-follow]').forEach((button) => button.addEventListener('click', closeFollowModal));
   views.copyPostLink?.addEventListener('click', copyShareLink);
+  views.markNotificationsRead?.addEventListener('click', handleMarkNotificationsRead);
+  $$('[data-close-likes]').forEach((button) => button.addEventListener('click', closeLikesModal));
 
   $('#emoji-toggle')?.addEventListener('click', () => toggleChatTools('emoji'));
   $('#gif-toggle')?.addEventListener('click', () => toggleChatTools('gif'));
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('.comment-more-wrap')) return;
+    if (state.commentMenu.postId || state.commentMenu.commentId) {
+      const postId = state.commentMenu.postId;
+      state.commentMenu = { postId: '', commentId: '' };
+      if (postId) renderCommentsForPost(postId);
+    }
+  });
 }
 
 function switchView(target) {
@@ -154,6 +198,7 @@ function switchView(target) {
     feed: ['Welcome back', 'Feed'],
     discover: ['People', 'Discover'],
     messages: ['Inbox', 'Messages'],
+    notifications: ['Activity', 'Notifications'],
     profile: ['Profile', 'Profile'],
     settings: ['Account', 'Settings']
   };
@@ -164,6 +209,10 @@ function switchView(target) {
   views.topbarTitle.textContent = labels[target]?.[1] || 'Pixora';
 
   if (target === 'settings') renderSettingsPanel();
+  if (target === 'notifications') {
+    renderNotifications();
+    handleMarkNotificationsRead({ silent: true });
+  }
   if (target === 'profile' && !state.viewingProfileUid) openUserProfile(state.profile?.uid);
 }
 
@@ -201,6 +250,13 @@ async function handleCreatePost(event) {
   setButtonLoading(button, true, file?.size ? 'Preparing image...' : 'Publishing...');
 
   try {
+    if (ensureNotBanned()) return;
+    const moderation = scanContent(data.content);
+    if (moderation.flagged) {
+      await handleBlockedContent('post', data.content, moderation);
+      return;
+    }
+
     const media = file?.size ? await uploadPostMedia(file, state.profile.uid) : null;
     setButtonLoading(button, true, 'Publishing...');
     await createPost(state.profile, data.content, media);
@@ -229,6 +285,11 @@ async function handleProfileSave(event) {
     if (data.avatarUrl && data.avatarUrl !== state.profile.avatarUrl) {
       const uploaded = await uploadAvatar(data.avatarUrl);
       data.avatarUrl = uploaded.url;
+    }
+
+    if (data.coverUrl && data.coverUrl !== state.profile.coverUrl) {
+      const uploaded = await uploadCoverImage(data.coverUrl);
+      data.coverUrl = uploaded.url;
     }
 
     await updateUserProfile(state.profile.uid, data);
@@ -336,6 +397,24 @@ function attachRealtimeListeners(uid) {
       renderConversations();
     })
   );
+
+  state.unsubscribers.push(
+    listenToNotifications(uid, (notifications) => {
+      state.notifications = notifications;
+      renderNotificationBadge();
+      renderNotifications();
+    })
+  );
+
+  state.unsubscribers.push(
+    listenToBlocked(uid, (blocked) => {
+      state.blocked = blocked;
+      renderPeople();
+      renderPosts();
+      renderProfilePanel();
+      renderConversations();
+    })
+  );
 }
 
 function cleanupRealtimeListeners() {
@@ -345,8 +424,11 @@ function cleanupRealtimeListeners() {
   state.unsubscribeMessages = null;
   if (state.unsubscribeProfileStats) state.unsubscribeProfileStats();
   state.unsubscribeProfileStats = null;
+  if (state.unsubscribeFollowList) state.unsubscribeFollowList();
+  state.unsubscribeFollowList = null;
   state.commentUnsubscribers.forEach((unsubscribe) => unsubscribe?.());
   state.commentUnsubscribers.clear();
+  state.commentsByPost.clear();
   state.openComments.clear();
   state.profile = null;
   state.users = [];
@@ -355,8 +437,13 @@ function cleanupRealtimeListeners() {
   state.following = new Set();
   state.followers = new Set();
   state.conversations = [];
+  state.notifications = [];
+  state.blocked = new Set();
+  state.commentMenu = { postId: '', commentId: '' };
+  state.likesModalPost = null;
   state.activeConversationId = null;
   state.activeChatUser = null;
+  state.followModal = { uid: '', type: 'followers', user: null, items: [] };
 }
 
 function showApp() {
@@ -386,9 +473,11 @@ function renderSettingsPanel() {
   if (document.activeElement !== form.username) form.username.value = state.profile.username || '';
   if (document.activeElement !== form.bio) form.bio.value = state.profile.bio || '';
   if (!form.avatarUrl.value) form.avatarUrl.value = state.profile.avatarUrl || '';
+  if (!form.coverUrl.value) form.coverUrl.value = state.profile.coverUrl || '';
   renderAvatarInto(views.settingsAvatarPreview, { ...state.profile, avatarUrl: form.avatarUrl.value || state.profile.avatarUrl }, 'xl');
+  renderCoverPreview(form.coverUrl.value || state.profile.coverUrl || '');
 
-  const savedPosts = state.posts.filter((post) => post.savedBy.includes(state.profile.uid));
+  const savedPosts = state.posts.filter((post) => post.savedBy.includes(state.profile.uid) && !state.blocked.has(post.authorId));
   renderPostsInto(views.savedPostsList, savedPosts, {
     emptyTitle: 'No saved posts',
     emptyBody: 'Tap the save button on posts you want to revisit later.'
@@ -456,13 +545,17 @@ function renderProfilePanel() {
 
   const isMe = user.uid === state.profile.uid;
   const isFollowing = state.following.has(user.uid);
-  const userPosts = state.posts.filter((post) => post.authorId === user.uid);
+  const userPosts = state.posts.filter((post) => post.authorId === user.uid && !state.blocked.has(post.authorId));
   const stats = isMe
     ? { followers: state.followers.size, following: state.following.size }
     : (state.viewingStats.uid === user.uid ? state.viewingStats : { followers: user.followersCount || 0, following: user.followingCount || 0 });
 
+  const coverStyle = user.coverUrl ? ` style="--cover-image: url('${escapeHTML(user.coverUrl)}')"` : '';
+
   views.profileHero.innerHTML = `
-    <div class="profile-cover"></div>
+    <div class="profile-cover ${user.coverUrl ? 'has-cover' : ''}"${coverStyle}>
+      ${isMe ? '<button class="cover-change-btn" type="button" data-cover-pick>Change cover</button>' : ''}
+    </div>
     <div class="profile-identity">
       ${avatarTemplate(user, 'xl')}
       <div class="profile-copy">
@@ -474,17 +567,20 @@ function renderProfilePanel() {
       <div class="profile-actions">
         ${isMe ? `
           <button class="ghost-btn" type="button" data-avatar-pick>Change photo</button>
+          <button class="ghost-btn" type="button" data-cover-pick>Change cover</button>
           <button class="primary-btn" type="button" data-view-target="settings">Edit profile</button>
         ` : `
           <button class="${isFollowing ? 'ghost-btn' : 'primary-btn'}" type="button" data-profile-follow>${isFollowing ? 'Following' : 'Follow'}</button>
           <button class="ghost-btn" type="button" data-profile-message>Message</button>
+          <button class="ghost-btn" type="button" data-profile-report>Report</button>
+          <button class="ghost-btn danger" type="button" data-profile-block>Block</button>
         `}
       </div>
     </div>
     <div class="profile-stats">
-      <div><strong>${userPosts.length}</strong><span>Posts</span></div>
-      <div><strong>${stats.followers || 0}</strong><span>Followers</span></div>
-      <div><strong>${stats.following || 0}</strong><span>Following</span></div>
+      <div class="profile-stat"><strong>${formatCount(userPosts.length)}</strong><span>Posts</span></div>
+      <button class="profile-stat" type="button" data-open-follow-list="followers" aria-label="View followers"><strong>${formatCount(stats.followers || 0)}</strong><span>Followers</span></button>
+      <button class="profile-stat" type="button" data-open-follow-list="following" aria-label="View following"><strong>${formatCount(stats.following || 0)}</strong><span>Following</span></button>
     </div>
   `;
 
@@ -497,13 +593,123 @@ function renderProfilePanel() {
   });
 
   $('[data-view-target="settings"]', views.profileHero)?.addEventListener('click', () => switchView('settings'));
-  $('[data-avatar-pick]', views.profileHero)?.addEventListener('click', () => views.avatarFile?.click());
+  $$('[data-avatar-pick]', views.profileHero).forEach((button) => button.addEventListener('click', () => views.avatarFile?.click()));
+  $$('[data-cover-pick]', views.profileHero).forEach((button) => button.addEventListener('click', () => views.coverFile?.click()));
   $('[data-profile-follow]', views.profileHero)?.addEventListener('click', () => toggleFollow(user));
   $('[data-profile-message]', views.profileHero)?.addEventListener('click', () => startChat(user));
+  $('[data-profile-report]', views.profileHero)?.addEventListener('click', () => openReportFlow({ targetUser: user, targetType: 'user' }));
+  $('[data-profile-block]', views.profileHero)?.addEventListener('click', () => handleBlockUser(user));
+  $$('[data-open-follow-list]', views.profileHero).forEach((button) => {
+    button.addEventListener('click', () => openFollowListModal(user, button.dataset.openFollowList));
+  });
+}
+
+
+
+function openFollowListModal(user, type = 'followers') {
+  if (!user?.uid || !views.followModal) return;
+
+  const normalizedType = type === 'following' ? 'following' : 'followers';
+  state.followModal = { uid: user.uid, type: normalizedType, user, items: [] };
+  views.followModal.classList.remove('hidden');
+  renderFollowModal();
+
+  if (state.unsubscribeFollowList) state.unsubscribeFollowList();
+  state.unsubscribeFollowList = listenToFollowList(user.uid, normalizedType, (items) => {
+    state.followModal.items = items;
+    items.forEach((item) => state.profileCache.set(item.uid, { ...findUser(item.uid), ...item }));
+    renderFollowModal();
+  });
+}
+
+function closeFollowModal() {
+  views.followModal?.classList.add('hidden');
+  if (state.unsubscribeFollowList) state.unsubscribeFollowList();
+  state.unsubscribeFollowList = null;
+  state.followModal = { uid: '', type: 'followers', user: null, items: [] };
+}
+
+function renderFollowModal() {
+  if (!views.followModal || views.followModal.classList.contains('hidden')) return;
+
+  const { uid, type, user, items } = state.followModal;
+  if (!uid || !user) return;
+
+  const isOwnProfile = uid === state.profile?.uid;
+  const title = type === 'following' ? 'Following' : 'Followers';
+  views.followModalTitle.textContent = title;
+  views.followModalSubtitle.textContent = `${user.displayName || 'User'} · @${user.username || 'user'}`;
+
+  if (!items.length) {
+    views.followList.innerHTML = emptyState(
+      type === 'following' ? 'Not following anyone yet' : 'No followers yet',
+      type === 'following' ? 'People this profile follows will appear here.' : 'Followers will appear here when people follow this profile.'
+    );
+    return;
+  }
+
+  views.followList.innerHTML = items.map((item) => {
+    const rowUser = findUser(item.uid) || item;
+    const isMe = rowUser.uid === state.profile?.uid;
+    const iFollow = state.following.has(rowUser.uid);
+    const primaryAction = isMe
+      ? '<span class="follow-pill">You</span>'
+      : `<button class="${iFollow ? 'ghost-btn' : 'primary-btn'} compact-action" type="button" data-follow-list-action="toggle" data-user-id="${escapeHTML(rowUser.uid)}">${iFollow ? 'Unfollow' : 'Follow'}</button>`;
+
+    const removeAction = type === 'followers' && isOwnProfile && !isMe
+      ? `<button class="ghost-btn danger compact-action" type="button" data-follow-list-action="remove" data-user-id="${escapeHTML(rowUser.uid)}">Remove</button>`
+      : '';
+
+    return `
+      <article class="follow-row" data-user-id="${escapeHTML(rowUser.uid)}">
+        <button class="follow-person as-button" type="button" data-follow-list-profile="${escapeHTML(rowUser.uid)}">
+          ${avatarTemplate(rowUser)}
+          <span>
+            <strong>${escapeHTML(rowUser.displayName || 'User')}</strong>
+            <small>@${escapeHTML(rowUser.username || 'user')}</small>
+          </span>
+        </button>
+        <div class="follow-row-actions">
+          ${primaryAction}
+          ${removeAction}
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  $$('[data-follow-list-profile]', views.followList).forEach((button) => {
+    button.addEventListener('click', () => {
+      const selectedUid = button.dataset.followListProfile;
+      closeFollowModal();
+      openUserProfile(selectedUid);
+    });
+  });
+
+  $$('[data-follow-list-action="toggle"]', views.followList).forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userToToggle = findUser(button.dataset.userId) || state.followModal.items.find((item) => item.uid === button.dataset.userId);
+      await toggleFollow(userToToggle);
+    });
+  });
+
+  $$('[data-follow-list-action="remove"]', views.followList).forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userToRemove = findUser(button.dataset.userId) || state.followModal.items.find((item) => item.uid === button.dataset.userId);
+      if (!userToRemove || !window.confirm(`Remove ${userToRemove.displayName || 'this user'} from your followers?`)) return;
+
+      try {
+        await removeFollower(state.profile, userToRemove);
+        showToast('Follower removed.');
+      } catch (error) {
+        showToast(friendlyError(error), 'error');
+      }
+    });
+  });
 }
 
 function renderPosts() {
-  renderPostsInto(views.postsList, state.posts, {
+  const visiblePosts = state.posts.filter((post) => !state.blocked.has(post.authorId));
+  renderPostsInto(views.postsList, visiblePosts, {
     emptyTitle: 'No posts yet',
     emptyBody: 'Create the first post and it will appear globally for every account.'
   });
@@ -521,7 +727,10 @@ function renderPostsInto(container, posts, options = {}) {
   bindPostActions(container);
 
   state.openComments.forEach((postId) => {
-    if (container.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) attachCommentListener(postId);
+    if (container.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) {
+      attachCommentListener(postId);
+      renderCommentsForPost(postId);
+    }
   });
 }
 
@@ -548,10 +757,11 @@ function postTemplate(post) {
       ${post.content ? `<p class="post-content">${escapeHTML(post.content)}</p>` : ''}
       ${media}
       <footer class="post-actions">
-        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post>${liked ? '♥' : '♡'} <span>${post.likeCount}</span></button>
-        <button class="action-btn" type="button" data-toggle-comments>💬 <span>${post.commentCount}</span></button>
+        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post>${liked ? '♥' : '♡'} <span>${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" type="button" data-view-likes>Liked by <span>${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" type="button" data-toggle-comments>💬 <span>${formatCount(post.commentCount)}</span></button>
         <button class="action-btn ${saved ? 'active' : ''}" type="button" data-save-post>🔖 <span>${saved ? 'Saved' : 'Save'}</span></button>
-        <button class="action-btn" type="button" data-share-post>↗ <span>${post.shareCount || 'Share'}</span></button>
+        <button class="action-btn" type="button" data-share-post>↗ <span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
       </footer>
       <section class="comments-panel ${commentsOpen ? 'open' : ''}" data-comments-panel>
         <div class="comments-list" data-comments-list="${escapeHTML(post.id)}"></div>
@@ -595,12 +805,20 @@ function bindPostActions(container) {
   $$('[data-like-post]', container).forEach((button) => {
     button.addEventListener('click', async () => {
       const post = getPostFromButton(button);
+      const addingLike = post && !post.likedBy.includes(state.profile.uid);
       try {
         await toggleLike(post, state.profile.uid);
+        if (addingLike) {
+          notifyPostLike(post, state.profile).catch((error) => console.warn('Like notification failed:', error));
+        }
       } catch (error) {
         showToast(friendlyError(error), 'error');
       }
     });
+  });
+
+  $$('[data-view-likes]', container).forEach((button) => {
+    button.addEventListener('click', () => openLikesModal(getPostFromButton(button)));
   });
 
   $$('[data-save-post]', container).forEach((button) => {
@@ -649,8 +867,25 @@ function bindPostActions(container) {
       const post = getPostFromButton(form);
       const input = $('[name="comment"]', form);
       try {
-        await addComment(post.id, state.profile, input.value);
+        if (ensureNotBanned()) return;
+        const text = input.value;
+        const moderation = scanContent(text);
+        if (moderation.flagged) {
+          await handleBlockedContent('comment', text, moderation);
+          return;
+        }
+
+        const createdComment = await addComment(post.id, state.profile, text);
+        state.openComments.add(post.id);
+        state.commentsByPost.set(post.id, [...(state.commentsByPost.get(post.id) || []), createdComment]);
+        renderCommentsForPost(post.id);
         form.reset();
+
+        notifyPostComment(post, state.profile, text).catch((error) => console.warn('Comment notification failed:', error));
+        const mentionedUsers = await resolveMentionedUsers(text);
+        mentionedUsers
+          .filter((user) => user.uid !== state.profile.uid && user.uid !== post.authorId)
+          .forEach((user) => notifyCommentMention(post, state.profile, user, text).catch((error) => console.warn('Mention notification failed:', error)));
       } catch (error) {
         showToast(friendlyError(error), 'error');
       }
@@ -659,35 +894,507 @@ function bindPostActions(container) {
 }
 
 function attachCommentListener(postId) {
-  if (state.commentUnsubscribers.has(postId)) return;
+  if (state.commentUnsubscribers.has(postId)) {
+    renderCommentsForPost(postId);
+    return;
+  }
 
   const unsubscribe = listenToComments(postId, (comments) => {
-    const targets = $$(`[data-comments-list="${cssEscape(postId)}"]`);
-    const markup = comments.length
-      ? comments.map((comment) => `
-        <div class="comment-item">
-          ${avatarTemplate({ displayName: comment.authorName, username: comment.authorUsername, avatarUrl: comment.authorAvatarUrl }, 'tiny')}
-          <div>
-            <strong>${escapeHTML(comment.authorName)}</strong>
-            <span>${escapeHTML(comment.text)}</span>
-          </div>
-        </div>
-      `).join('')
-      : '<div class="empty-comments">No comments yet. Be first.</div>';
-
-    targets.forEach((target) => {
-      target.innerHTML = markup;
-    });
+    state.commentsByPost.set(postId, comments);
+    renderCommentsForPost(postId);
   });
 
   state.commentUnsubscribers.set(postId, unsubscribe);
+}
+
+function renderCommentsForPost(postId) {
+  const comments = (state.commentsByPost.get(postId) || []).filter((comment) => !state.blocked.has(comment.authorId));
+  const targets = $$(`[data-comments-list="${cssEscape(postId)}"]`);
+  const markup = comments.length
+    ? comments.map((comment) => commentTemplate(postId, comment)).join('')
+    : '<div class="empty-comments">No comments yet. Be first.</div>';
+
+  targets.forEach((target) => {
+    target.innerHTML = markup;
+    bindCommentActions(target, postId);
+  });
+}
+
+function commentTemplate(postId, comment) {
+  const uid = state.profile?.uid;
+  const post = state.posts.find((item) => item.id === postId);
+  const liked = Array.isArray(comment.likedBy) && comment.likedBy.includes(uid);
+  const canEdit = comment.authorId === uid;
+  const canDelete = comment.authorId === uid || post?.authorId === uid;
+  const canModerate = comment.authorId !== uid;
+
+  return `
+    <div class="comment-item" data-comment-id="${escapeHTML(comment.id)}" data-comment-post-id="${escapeHTML(postId)}" data-comment-author-id="${escapeHTML(comment.authorId)}">
+      <button class="as-button" type="button" data-comment-profile="${escapeHTML(comment.authorId)}">
+        ${avatarTemplate({ displayName: comment.authorName, username: comment.authorUsername, avatarUrl: comment.authorAvatarUrl }, 'tiny')}
+      </button>
+      <div class="comment-body">
+        <button class="comment-author as-button" type="button" data-comment-profile="${escapeHTML(comment.authorId)}">${escapeHTML(comment.authorName)}</button>
+        <span>${renderMentionedText(comment.text, 'comment')}${comment.edited ? ' <small class="edited-label">(edited)</small>' : ''}</span>
+      </div>
+      <button class="comment-like ${liked ? 'liked' : ''}" type="button" data-comment-like title="Like comment">
+        <span>♥</span><small>${comment.likeCount ? formatCount(comment.likeCount) : ''}</small>
+      </button>
+      <div class="comment-more-wrap">
+        <button class="comment-more-btn" type="button" data-comment-menu-button title="Comment options">•••</button>
+        <div class="comment-menu ${state.commentMenu.postId === postId && state.commentMenu.commentId === comment.id ? 'open' : ''}" data-comment-menu>
+          ${canEdit ? '<button type="button" data-comment-edit>Edit comment</button>' : ''}
+          ${canDelete ? '<button type="button" class="danger" data-comment-delete>Delete comment</button>' : ''}
+          ${canModerate ? '<button type="button" data-comment-report>Report comment</button>' : ''}
+          ${canModerate ? '<button type="button" data-comment-report-user>Report user</button>' : ''}
+          ${canModerate ? '<button type="button" class="danger" data-comment-block-user>Block user</button>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindCommentActions(target, postId) {
+  $$('[data-comment-profile]', target).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.commentProfile));
+  });
+
+  $$('[data-comment-mention]', target).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.commentMention));
+  });
+
+  $$('[data-comment-like]', target).forEach((button) => {
+    button.addEventListener('click', async () => {
+      const item = button.closest('[data-comment-id]');
+      await toggleCommentLikeFromElement(postId, item);
+    });
+  });
+
+  $$('[data-comment-menu-button]', target).forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const item = button.closest('[data-comment-id]');
+      toggleCommentMenu(postId, item?.dataset.commentId);
+    });
+  });
+
+  $$('[data-comment-edit]', target).forEach((button) => {
+    button.addEventListener('click', () => editCommentFromElement(postId, button.closest('[data-comment-id]')));
+  });
+
+  $$('[data-comment-delete]', target).forEach((button) => {
+    button.addEventListener('click', () => deleteCommentFromElement(postId, button.closest('[data-comment-id]')));
+  });
+
+  $$('[data-comment-report]', target).forEach((button) => {
+    button.addEventListener('click', () => {
+      const item = button.closest('[data-comment-id]');
+      const comment = findComment(postId, item?.dataset.commentId);
+      const post = state.posts.find((entry) => entry.id === postId);
+      const targetUser = findUser(comment?.authorId) || {
+        uid: comment?.authorId,
+        displayName: comment?.authorName,
+        username: comment?.authorUsername,
+        avatarUrl: comment?.authorAvatarUrl
+      };
+      openReportFlow({ targetUser, targetComment: comment, post, targetType: 'comment' });
+    });
+  });
+
+  $$('[data-comment-report-user]', target).forEach((button) => {
+    button.addEventListener('click', () => {
+      const comment = findComment(postId, button.closest('[data-comment-id]')?.dataset.commentId);
+      const targetUser = findUser(comment?.authorId) || {
+        uid: comment?.authorId,
+        displayName: comment?.authorName,
+        username: comment?.authorUsername,
+        avatarUrl: comment?.authorAvatarUrl
+      };
+      openReportFlow({ targetUser, targetType: 'user' });
+    });
+  });
+
+  $$('[data-comment-block-user]', target).forEach((button) => {
+    button.addEventListener('click', () => {
+      const comment = findComment(postId, button.closest('[data-comment-id]')?.dataset.commentId);
+      const targetUser = findUser(comment?.authorId) || {
+        uid: comment?.authorId,
+        displayName: comment?.authorName,
+        username: comment?.authorUsername,
+        avatarUrl: comment?.authorAvatarUrl
+      };
+      handleBlockUser(targetUser);
+    });
+  });
+
+  $$('[data-comment-id]', target).forEach((item) => {
+    item.addEventListener('dblclick', async (event) => {
+      if (event.target.closest('button') || event.target.closest('[data-comment-menu]')) return;
+      await toggleCommentLikeFromElement(postId, item);
+    });
+
+    let holdTimer = null;
+    item.addEventListener('touchstart', () => {
+      holdTimer = setTimeout(() => toggleCommentMenu(postId, item.dataset.commentId), 560);
+    }, { passive: true });
+    item.addEventListener('touchend', () => clearTimeout(holdTimer));
+    item.addEventListener('touchmove', () => clearTimeout(holdTimer));
+  });
+}
+
+function toggleCommentMenu(postId, commentId) {
+  if (!postId || !commentId) return;
+  const same = state.commentMenu.postId === postId && state.commentMenu.commentId === commentId;
+  state.commentMenu = same ? { postId: '', commentId: '' } : { postId, commentId };
+  renderCommentsForPost(postId);
+}
+
+async function editCommentFromElement(postId, item) {
+  const comment = findComment(postId, item?.dataset.commentId);
+  if (!comment || comment.authorId !== state.profile?.uid) return;
+
+  const nextText = window.prompt('Edit your comment', comment.text);
+  if (nextText === null) return;
+  const cleanTextValue = cleanInput(nextText, 300);
+  if (!cleanTextValue) {
+    showToast('Comment cannot be empty.', 'error');
+    return;
+  }
+
+  if (ensureNotBanned()) return;
+  const moderation = scanContent(cleanTextValue);
+  if (moderation.flagged) {
+    await handleBlockedContent('comment', cleanTextValue, moderation);
+    return;
+  }
+
+  try {
+    await updateComment(postId, comment.id, state.profile.uid, cleanTextValue);
+    state.commentMenu = { postId: '', commentId: '' };
+    showToast('Comment updated.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function deleteCommentFromElement(postId, item) {
+  const comment = findComment(postId, item?.dataset.commentId);
+  const post = state.posts.find((entry) => entry.id === postId);
+  if (!comment) return;
+
+  const canDelete = comment.authorId === state.profile?.uid || post?.authorId === state.profile?.uid;
+  if (!canDelete) return;
+
+  if (!window.confirm('Delete this comment?')) return;
+
+  try {
+    await deleteComment(postId, comment.id);
+    state.commentMenu = { postId: '', commentId: '' };
+    showToast('Comment deleted.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+function ensureNotBanned() {
+  const message = banMessage(state.profile);
+  if (!message) return false;
+  showToast(message, 'error');
+  return true;
+}
+
+async function handleBlockedContent(source, text, moderation) {
+  try {
+    const result = await registerContentViolation(state.profile, {
+      type: `${source}_blocked`,
+      source,
+      text,
+      group: moderation.group,
+      matchedTerm: moderation.matchedTerm
+    });
+
+    if (result.banned) {
+      showToast(`Content blocked. Your account is temporarily limited for ${result.minutes} minutes.`, 'error');
+    } else {
+      showToast('Content blocked because it appears to violate Pixora community rules.', 'error');
+    }
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function handleBlockUser(user) {
+  if (!user?.uid || user.uid === state.profile?.uid) return;
+  const confirmed = window.confirm(`Block @${user.username || 'this user'}? You will stop seeing their posts and conversations.`);
+  if (!confirmed) return;
+
+  try {
+    await blockUser(state.profile, user);
+    state.blocked.add(user.uid);
+    state.commentMenu = { postId: '', commentId: '' };
+    renderPeople();
+    renderPosts();
+    renderProfilePanel();
+    renderConversations();
+    showToast(`Blocked @${user.username || 'user'}.`);
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function openReportFlow({ targetUser, targetComment = null, post = null, targetType = 'user' }) {
+  if (!targetUser?.uid || targetUser.uid === state.profile?.uid) return;
+
+  const reasonList = REPORT_GROUPS.map((reason, index) => `${index + 1}. ${reason}`).join('\n');
+  const reasonInput = window.prompt(`Why are you reporting this ${targetType}?\n\n${reasonList}\n\nEnter a number or type your reason group:`, '1');
+  if (reasonInput === null) return;
+
+  const selectedIndex = Number(reasonInput.trim()) - 1;
+  const group = REPORT_GROUPS[selectedIndex] || REPORT_GROUPS.find((reason) => reason.toLowerCase() === reasonInput.trim().toLowerCase()) || 'Other';
+
+  const details = window.prompt('Add a short note for review. What happened?', targetComment?.text || '');
+  if (details === null) return;
+
+  const confirmReport = window.confirm(`Submit report?\n\nUser: @${targetUser.username || 'user'}\nReason: ${group}`);
+  if (!confirmReport) return;
+
+  try {
+    await submitReport({
+      reporter: state.profile,
+      targetUser,
+      targetComment,
+      post,
+      group,
+      details
+    });
+
+    state.commentMenu = { postId: '', commentId: '' };
+    showToast('Report submitted. Thank you for helping keep Pixora safe.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+
+async function toggleCommentLikeFromElement(postId, item) {
+  const commentId = item?.dataset.commentId;
+  const comment = findComment(postId, commentId);
+  if (!comment) return;
+
+  try {
+    await toggleCommentLike(postId, comment, state.profile.uid);
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+function findComment(postId, commentId) {
+  return (state.commentsByPost.get(postId) || []).find((comment) => comment.id === commentId);
+}
+
+function renderMentionedText(text = '', sourceType = 'message') {
+  const source = String(text || '');
+  const mentionPattern = /@([a-zA-Z0-9_.]{3,30})/g;
+  let cursor = 0;
+  let output = '';
+  let match;
+
+  while ((match = mentionPattern.exec(source)) !== null) {
+    const username = match[1].toLowerCase();
+    const user = findUserByUsername(username);
+    const attr = sourceType === 'comment' ? 'data-comment-mention' : 'data-message-mention';
+    output += escapeHTML(source.slice(cursor, match.index));
+    if (user?.uid) {
+      output += `<button class="mention-link" type="button" ${attr}="${escapeHTML(user.uid)}">@${escapeHTML(match[1])}</button>`;
+    } else {
+      output += `<span class="mention-text">@${escapeHTML(match[1])}</span>`;
+    }
+    cursor = match.index + match[0].length;
+  }
+
+  output += escapeHTML(source.slice(cursor));
+  return output;
+}
+
+function findUserByUsername(username = '') {
+  const usernameLower = String(username || '').toLowerCase();
+  return [state.profile, ...state.users, ...state.profileCache.values()].find((item) => item?.username?.toLowerCase() === usernameLower) || null;
+}
+
+async function resolveMentionedUsers(text = '') {
+  const usernames = Array.from(new Set(Array.from(String(text || '').matchAll(/@([a-zA-Z0-9_.]{3,30})/g)).map((match) => match[1].toLowerCase())));
+  const users = [];
+
+  for (const username of usernames) {
+    let user = findUserByUsername(username);
+    if (!user) {
+      user = await getUserByUsername(username);
+      if (user?.uid) state.profileCache.set(user.uid, user);
+    }
+    if (user?.uid && !users.some((item) => item.uid === user.uid)) users.push(user);
+  }
+
+  return users;
+}
+
+function renderNotificationBadge() {
+  const unreadCount = state.notifications.filter((item) => !item.read).length;
+  if (!views.notificationBadge) return;
+  views.notificationBadge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
+  views.notificationBadge.classList.toggle('hidden', unreadCount === 0);
+}
+
+async function handleMarkNotificationsRead(options = {}) {
+  if (!state.profile?.uid) return;
+  const hasUnread = state.notifications.some((item) => !item.read);
+  if (!hasUnread) return;
+  try {
+    await markNotificationsRead(state.profile.uid);
+    if (!options.silent) showToast('Notifications marked as read.');
+  } catch (error) {
+    if (!options.silent) showToast(friendlyError(error), 'error');
+  }
+}
+
+function renderNotifications() {
+  if (!views.notificationsList) return;
+
+  if (!state.notifications.length) {
+    views.notificationsList.innerHTML = emptyState('No notifications yet', 'Likes and other activity from your posts will appear here.');
+    return;
+  }
+
+  views.notificationsList.innerHTML = state.notifications.map((notification) => notificationTemplate(notification)).join('');
+
+  $$('[data-notification-post]', views.notificationsList).forEach((button) => {
+    button.addEventListener('click', () => openNotificationPost(button.dataset.notificationPost));
+  });
+
+  $$('[data-notification-profile]', views.notificationsList).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.notificationProfile));
+  });
+}
+
+function notificationTemplate(notification) {
+  const latestActor = findUser(notification.latestActorId) || {
+    uid: notification.latestActorId,
+    displayName: notification.latestActorName,
+    username: notification.latestActorUsername,
+    avatarUrl: notification.latestActorAvatarUrl
+  };
+
+  let title = 'New activity on Pixora';
+  let body = notification.postPreview || 'Open the post';
+
+  if (notification.type === 'post_like') {
+    const moreCount = Math.max(0, (notification.actorCount || notification.actorIds.length || 1) - 1);
+    title = moreCount > 0
+      ? `${latestActor.displayName || notification.latestActorName} and ${moreCount} more liked your post`
+      : `${latestActor.displayName || notification.latestActorName} liked your post`;
+  } else if (notification.type === 'post_comment') {
+    title = `${latestActor.displayName || notification.latestActorName} commented on your post`;
+    body = notification.commentText || notification.postPreview || 'Open your post';
+  } else if (notification.type === 'comment_mention') {
+    title = `${latestActor.displayName || notification.latestActorName} mentioned you in a comment`;
+    body = notification.commentText || notification.postPreview || 'Open the post';
+  } else if (notification.type === 'account_ban') {
+    title = 'Your account has a temporary safety limit';
+    body = notification.commentText || notification.postPreview || 'Open account settings for details.';
+  }
+
+  return `
+    <article class="notification-item ${notification.read ? '' : 'unread'}">
+      <button class="notification-avatar as-button" type="button" data-notification-profile="${escapeHTML(latestActor.uid || '')}">
+        ${avatarTemplate(latestActor)}
+      </button>
+      <button class="notification-copy as-button" type="button" data-notification-post="${escapeHTML(notification.postId)}">
+        <strong>${escapeHTML(title)}</strong>
+        <span>${escapeHTML(body)}</span>
+        <small>${escapeHTML(timeAgo(notification.updatedAt))}</small>
+      </button>
+    </article>
+  `;
+}
+function openNotificationPost(postId) {
+  if (!postId) return;
+  const post = state.posts.find((item) => item.id === postId);
+  if (post) {
+    state.openComments.add(post.id);
+    renderPosts();
+  }
+  switchView('feed');
+  setTimeout(() => {
+    const element = document.querySelector(`[data-post-id="${cssEscape(postId)}"]`);
+    if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    else showToast('That post is not in your current feed.', 'error');
+  }, 80);
+}
+
+async function openLikesModal(post) {
+  if (!post?.id || !views.likesModal) return;
+  state.likesModalPost = post;
+  views.likesModal.classList.remove('hidden');
+  renderLikesModal();
+
+  const missingIds = post.likedBy.filter((uid) => uid && !findUser(uid));
+  if (missingIds.length) {
+    const loadedUsers = await Promise.all(missingIds.slice(0, 30).map((uid) => getUserById(uid)));
+    loadedUsers.filter(Boolean).forEach((user) => state.profileCache.set(user.uid, user));
+    renderLikesModal();
+  }
+}
+
+function closeLikesModal() {
+  views.likesModal?.classList.add('hidden');
+  state.likesModalPost = null;
+}
+
+function renderLikesModal() {
+  const post = state.likesModalPost;
+  if (!post || !views.likesList) return;
+
+  const likedUsers = post.likedBy.map((uid) => findUser(uid) || { uid, displayName: 'Pixora user', username: 'user', avatarUrl: '' });
+  if (views.likesModalTitle) views.likesModalTitle.textContent = `${formatCount(post.likeCount || likedUsers.length)} ${post.likeCount === 1 ? 'like' : 'likes'}`;
+
+  if (!likedUsers.length) {
+    views.likesList.innerHTML = emptyState('No likes yet', 'People who like this post will appear here.');
+    return;
+  }
+
+  views.likesList.innerHTML = likedUsers.map((user) => {
+    const isMe = user.uid === state.profile?.uid;
+    const iFollow = state.following.has(user.uid);
+    return `
+      <article class="likes-row">
+        <button class="follow-person as-button" type="button" data-like-profile="${escapeHTML(user.uid)}">
+          ${avatarTemplate(user)}
+          <span>
+            <strong>${escapeHTML(user.displayName || 'User')}</strong>
+            <small>@${escapeHTML(user.username || 'user')}</small>
+          </span>
+        </button>
+        ${isMe ? '<span class="follow-pill">You</span>' : `<button class="${iFollow ? 'ghost-btn' : 'primary-btn'} compact-action" type="button" data-like-follow="${escapeHTML(user.uid)}">${iFollow ? 'Unfollow' : 'Follow'}</button>`}
+      </article>
+    `;
+  }).join('');
+
+  $$('[data-like-profile]', views.likesList).forEach((button) => {
+    button.addEventListener('click', () => {
+      closeLikesModal();
+      openUserProfile(button.dataset.likeProfile);
+    });
+  });
+
+  $$('[data-like-follow]', views.likesList).forEach((button) => {
+    button.addEventListener('click', () => toggleFollow(findUser(button.dataset.likeFollow)));
+  });
 }
 
 function renderPeople() {
   if (!state.profile) return;
 
   const term = views.peopleSearch?.value?.trim().toLowerCase() || '';
-  const users = state.users.filter((user) => {
+  const users = state.users.filter((user) => !state.blocked.has(user.uid)).filter((user) => {
     const haystack = `${user.displayName || ''} ${user.username || ''}`.toLowerCase();
     return haystack.includes(term);
   });
@@ -733,7 +1440,10 @@ function renderPeople() {
 function renderConversations() {
   if (!state.profile) return;
 
-  const realConversations = state.conversations.filter((conversation) => Boolean(conversation.lastMessage));
+  const realConversations = state.conversations.filter((conversation) => {
+    const other = getOtherMember(conversation);
+    return Boolean(conversation.lastMessage) && !state.blocked.has(other.uid);
+  });
   if (!realConversations.length) {
     views.conversationList.innerHTML = '<div class="empty-state"><strong>No chats</strong><span>Only conversations with real messages appear here.</span></div>';
     return;
@@ -795,6 +1505,7 @@ async function toggleFollow(user) {
     renderPeople();
     renderProfilePanel();
     renderSettingsPanel();
+    renderFollowModal();
   } catch (error) {
     showToast(friendlyError(error), 'error');
   }
@@ -802,6 +1513,10 @@ async function toggleFollow(user) {
 
 async function startChat(user) {
   if (!user || !state.profile) return;
+  if (state.blocked.has(user.uid)) {
+    showToast('You blocked this user. Unblock them before messaging.', 'error');
+    return;
+  }
 
   try {
     const conversationId = await openConversation(state.profile, user);
@@ -872,6 +1587,10 @@ function renderMessages(messages) {
     });
   });
 
+  $$('[data-message-mention]', views.messagesList).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.messageMention));
+  });
+
   $$('img', views.messagesList).forEach((image) => {
     if (!image.complete) {
       image.addEventListener('load', () => scrollMessagesToBottom(), { once: true });
@@ -881,10 +1600,16 @@ function renderMessages(messages) {
   scrollMessagesToBottom();
 }
 
+
+function renderMessageText(text = '') {
+  return renderMentionedText(text, 'message');
+}
+
+
 function messageTemplate(message) {
   const mine = message.senderId === state.profile?.uid;
   const content = [];
-  if (message.text) content.push(`<div>${escapeHTML(message.text)}</div>`);
+  if (message.text) content.push(`<div>${renderMessageText(message.text)}</div>`);
   if (message.imageUrl) content.push(`<img class="message-media" src="${escapeHTML(message.imageUrl)}" alt="Shared image" loading="lazy" />`);
   if (message.gifUrl) content.push(`<img class="message-media gif" src="${escapeHTML(message.gifUrl)}" alt="${escapeHTML(message.gifTitle || 'GIF')}" loading="lazy" />`);
   if (message.postId && message.postPreview) {
@@ -1041,6 +1766,38 @@ async function sendGif(url, title) {
   } catch (error) {
     showToast(friendlyError(error), 'error');
   }
+}
+
+async function handleCoverSelect() {
+  const file = views.coverFile?.files?.[0];
+  if (!file || !state.profile) return;
+
+  try {
+    showToast('Preparing cover image...');
+    const uploaded = await uploadCoverImage(file);
+    const form = $('#profile-form');
+    if (form?.coverUrl) form.coverUrl.value = uploaded.url;
+    renderCoverPreview(uploaded.url);
+    await updateUserProfile(state.profile.uid, {
+      displayName: state.profile.displayName,
+      username: state.profile.username,
+      bio: state.profile.bio,
+      avatarUrl: state.profile.avatarUrl,
+      coverUrl: uploaded.url
+    });
+    showToast('Cover image updated.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  } finally {
+    if (views.coverFile) views.coverFile.value = '';
+  }
+}
+
+function renderCoverPreview(coverUrl = '') {
+  if (!views.settingsCoverPreview) return;
+  views.settingsCoverPreview.classList.toggle('has-cover', Boolean(coverUrl));
+  views.settingsCoverPreview.style.backgroundImage = coverUrl ? `linear-gradient(180deg, rgba(8,8,14,0.08), rgba(8,8,14,0.4)), url("${coverUrl}")` : '';
+  views.settingsCoverPreview.innerHTML = coverUrl ? '<span>Cover selected</span>' : '<span>No cover image selected</span>';
 }
 
 function renderSelectedMediaPreview() {

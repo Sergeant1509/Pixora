@@ -88,3 +88,32 @@ Do not enable Firebase Storage for this Spark/free-plan version.
 - Profile photo editing is available in Settings and also from your own Profile page using `Change photo`.
 - Post sharing opens a Pixora share modal. You can copy the post link or send the post into a chat.
 - On mobile, the sidebar becomes a bottom navigation bar for a cleaner responsive layout.
+
+
+## Safety, Reports, and Moderation
+
+Pixora includes client-side safety checks for posts and comments. Content that matches blocked adult/vulgar patterns is prevented from publishing and a record is written to the `moderationEvents` collection.
+
+User reports are stored in the `reports` collection with fields such as:
+
+- `reporterId`
+- `targetUserId`
+- `targetType`
+- `postId`
+- `commentId`
+- `reasonGroup`
+- `details`
+- `status`
+- `createdAt`
+
+To review reports in Firebase Console:
+
+1. Open Firebase Console.
+2. Go to Firestore Database.
+3. Open the `reports` collection.
+4. Filter or sort by `reasonGroup`, `targetUserId`, `status`, or `createdAt`.
+5. Change `status` manually if you want to mark a report as reviewed.
+
+Temporary limits are stored on the user document with fields like `bannedUntil`, `banReason`, `reportCount`, and `moderationViolationCount`.
+
+For production apps, moderation and bans should be moved to a trusted backend or Firebase Cloud Functions so users cannot bypass enforcement from the browser.

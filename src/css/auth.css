@@ -292,3 +292,39 @@
   background: white;
   font-weight: 900;
 }
+
+.username-status {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.username-status[data-state="available"] {
+  color: #34d399;
+}
+
+.username-status[data-state="taken"] {
+  color: #fb7185;
+}
+
+.username-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.username-suggestions button {
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 800;
+}
+
+.username-suggestions button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(139, 92, 246, 0.6);
+}

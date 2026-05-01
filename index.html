@@ -40,6 +40,7 @@
           <button class="nav-link active" type="button" data-view-target="feed" title="Feed"><span class="nav-icon">⌂</span><span class="nav-text">Feed</span></button>
           <button class="nav-link" type="button" data-view-target="discover" title="Discover"><span class="nav-icon">⌕</span><span class="nav-text">Discover</span></button>
           <button class="nav-link" type="button" data-view-target="messages" title="Messages"><span class="nav-icon">✉</span><span class="nav-text">Messages</span></button>
+          <button class="nav-link notification-nav" type="button" data-view-target="notifications" title="Notifications"><span class="nav-icon">♡</span><span class="nav-text">Notifications</span><span id="notification-badge" class="nav-badge hidden">0</span></button>
           <button class="nav-link" type="button" data-view-target="profile" title="Profile"><span class="nav-icon">◉</span><span class="nav-text">Profile</span></button>
           <button class="nav-link" type="button" data-view-target="settings" title="Settings"><span class="nav-icon">⚙</span><span class="nav-text">Settings</span></button>
         </nav>
@@ -119,6 +120,19 @@
           </div>
         </section>
 
+        <section id="notifications-view" class="view" data-view="notifications">
+          <div class="notifications-shell glass-card reveal-up">
+            <div class="section-heading compact">
+              <div>
+                <span class="muted-label">Activity</span>
+                <h2>Notifications</h2>
+              </div>
+              <button id="mark-notifications-read" class="ghost-btn" type="button">Mark all read</button>
+            </div>
+            <div id="notifications-list" class="notifications-list"></div>
+          </div>
+        </section>
+
         <section id="profile-view" class="view" data-view="profile">
           <div class="profile-page">
             <section id="profile-hero" class="profile-hero glass-card reveal-up"></section>
@@ -144,6 +158,14 @@
                 </div>
               </div>
               <form id="profile-form" class="settings-form" enctype="multipart/form-data">
+                <div class="cover-editor-row">
+                  <div id="settings-cover-preview" class="settings-cover-preview"><span>No cover image selected</span></div>
+                  <label class="upload-chip">
+                    <input id="cover-file" type="file" name="coverFile" accept="image/*" />
+                    <span>Change cover</span>
+                  </label>
+                </div>
+                <input type="hidden" name="coverUrl" />
                 <div class="avatar-editor-row">
                   <div id="settings-avatar-preview" class="avatar xl"></div>
                   <label class="upload-chip">
@@ -222,6 +244,19 @@
       </div>
     </div>
 
+    <div id="likes-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="People who liked this post">
+      <div class="modal-card likes-card">
+        <div class="modal-header">
+          <div>
+            <span class="muted-label">Post likes</span>
+            <h3 id="likes-modal-title">Liked by</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-likes>×</button>
+        </div>
+        <div id="likes-list" class="likes-list"></div>
+      </div>
+    </div>
+
     <div id="share-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Share post">
       <div class="modal-card share-card">
         <div class="modal-header">
@@ -235,6 +270,19 @@
         <button id="copy-post-link" class="ghost-btn full" type="button">Copy post link</button>
         <div class="share-list-title">Send to people</div>
         <div id="share-users-list" class="share-users-list"></div>
+      </div>
+    </div>
+
+    <div id="follow-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Followers and following">
+      <div class="modal-card follow-modal-card">
+        <div class="modal-header">
+          <div>
+            <span id="follow-modal-subtitle" class="muted-label">Profile</span>
+            <h3 id="follow-modal-title">Followers</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-follow>×</button>
+        </div>
+        <div id="follow-list" class="follow-list"></div>
       </div>
     </div>
 

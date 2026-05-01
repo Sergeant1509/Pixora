@@ -75,6 +75,38 @@ export async function toggleSave(post, uid) {
   });
 }
 
+export async function updateComment(postId, commentId, uid, text) {
+  if (!postId || !commentId || !uid) return;
+  const safeText = cleanText(text, 300);
+  if (!safeText) throw new Error('Comment cannot be empty.');
+
+  await updateDoc(doc(db, 'posts', postId, 'comments', commentId), {
+    text: safeText,
+    edited: true,
+    editedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function deleteComment(postId, commentId) {
+  if (!postId || !commentId) return;
+  await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
+  await updateDoc(doc(db, 'posts', postId), {
+    commentCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function toggleCommentLike(postId, comment, uid) {
+  if (!postId || !comment?.id || !uid) return;
+  const liked = Array.isArray(comment.likedBy) && comment.likedBy.includes(uid);
+  await updateDoc(doc(db, 'posts', postId, 'comments', comment.id), {
+    likedBy: liked ? arrayRemove(uid) : arrayUnion(uid),
+    likeCount: increment(liked ? -1 : 1),
+    updatedAt: serverTimestamp()
+  });
+}
+
 export async function increaseShareCount(postId) {
   if (!postId) return;
   await updateDoc(doc(db, 'posts', postId), {
@@ -87,30 +119,47 @@ export function listenToComments(postId, callback) {
   const commentsQuery = query(
     collection(db, 'posts', postId, 'comments'),
     orderBy('createdAt', 'asc'),
-    limit(80)
+    limit(120)
   );
 
   return onSnapshot(commentsQuery, (snapshot) => {
     callback(snapshot.docs.map((row) => normalizeComment({ id: row.id, ...row.data() })));
-  }, () => callback([]));
+  }, (error) => {
+    console.error('Comment listener failed:', error);
+    callback([]);
+  });
 }
 
 export async function addComment(postId, profile, text) {
   const safeText = cleanText(text, 300);
   if (!safeText) throw new Error('Comment cannot be empty.');
 
-  await addDoc(collection(db, 'posts', postId, 'comments'), {
+  const commentRef = await addDoc(collection(db, 'posts', postId, 'comments'), {
     authorId: profile.uid,
     authorName: profile.displayName,
     authorUsername: profile.username,
     authorAvatarUrl: profile.avatarUrl || '',
     text: safeText,
-    createdAt: serverTimestamp()
+    likedBy: [],
+    likeCount: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   });
 
   await updateDoc(doc(db, 'posts', postId), {
     commentCount: increment(1),
     updatedAt: serverTimestamp()
+  });
+
+  return normalizeComment({
+    id: commentRef.id,
+    authorId: profile.uid,
+    authorName: profile.displayName,
+    authorUsername: profile.username,
+    authorAvatarUrl: profile.avatarUrl || '',
+    text: safeText,
+    likedBy: [],
+    likeCount: 0
   });
 }
 
@@ -145,6 +194,11 @@ function normalizeComment(comment = {}) {
     authorUsername: comment.authorUsername || 'user',
     authorAvatarUrl: comment.authorAvatarUrl || '',
     text: comment.text || '',
-    createdAt: comment.createdAt || new Date().toISOString()
+    likedBy: Array.isArray(comment.likedBy) ? comment.likedBy.map(String) : [],
+    likeCount: Number(comment.likeCount || 0),
+    edited: Boolean(comment.edited),
+    editedAt: comment.editedAt || null,
+    createdAt: comment.createdAt || new Date().toISOString(),
+    updatedAt: comment.updatedAt || comment.createdAt || new Date().toISOString()
   };
 }

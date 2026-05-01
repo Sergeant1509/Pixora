@@ -65,7 +65,9 @@
             </label>
             <label>
               Username
-              <input type="text" name="username" autocomplete="username" placeholder="username" minlength="3" maxlength="20" required />
+              <input id="username-input" type="text" name="username" autocomplete="username" placeholder="username" minlength="3" maxlength="20" required />
+              <small id="username-status" class="username-status">Pick a unique username.</small>
+              <div id="username-suggestions" class="username-suggestions" aria-live="polite"></div>
             </label>
           </div>
           <label>
