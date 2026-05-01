@@ -18,7 +18,7 @@ import { timeAgo } from './utils/time.js';
 import { friendlyError, showToast } from './ui/toast.js';
 
 const emojiSet = ['😀', '😂', '😍', '🔥', '❤️', '👏', '✨', '😭', '😎', '🙏', '💯', '🎉', '😊', '🤝', '🌟', '💬'];
-const tenorKey = import.meta.env.VITE_TENOR_API_KEY || 'LIVDSRZULELA';
+const giphyKey = import.meta.env.VITE_GIPHY_API_KEY || '';
 
 const state = {
   authUser: null,
@@ -910,46 +910,96 @@ function renderEmojiPanel() {
 function renderGifPanel() {
   views.chatTools.innerHTML = `
     <div class="gif-search-row">
-      <input id="gif-search" type="search" placeholder="Search GIFs with Tenor" />
+      <input id="gif-search" type="search" placeholder="Search GIFs" autocomplete="off" />
       <button id="gif-search-btn" class="ghost-btn" type="button">Search</button>
     </div>
-    <div id="gif-results" class="gif-results"><span class="soft-note">Search for a GIF to send.</span></div>
+    <div id="gif-results" class="gif-results">
+      <span class="soft-note">Type a word like happy, love, teddy, funny...</span>
+    </div>
   `;
 
-  $('#gif-search-btn', views.chatTools)?.addEventListener('click', () => loadGifs($('#gif-search', views.chatTools).value));
-  $('#gif-search', views.chatTools)?.addEventListener('keydown', (event) => {
+  const input = $('#gif-search', views.chatTools);
+  const button = $('#gif-search-btn', views.chatTools);
+
+  button?.addEventListener('click', () => {
+    loadGifs(input.value);
+  });
+
+  input?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      loadGifs(event.currentTarget.value);
+      loadGifs(input.value);
     }
   });
-  loadGifs('reaction');
+
+  let gifTimer;
+  input?.addEventListener('input', () => {
+    clearTimeout(gifTimer);
+
+    gifTimer = setTimeout(() => {
+      if (input.value.trim().length >= 2) {
+        loadGifs(input.value);
+      }
+    }, 500);
+  });
 }
 
 async function loadGifs(queryText) {
   const results = $('#gif-results', views.chatTools);
-  const query = queryText?.trim() || 'reaction';
+  const query = cleanInput(queryText, 40);
+
+  if (!query) {
+    results.innerHTML = '<span class="soft-note">Search for a GIF to send.</span>';
+    return;
+  }
+
+  if (!giphyKey) {
+    results.innerHTML = '<span class="soft-note">Missing GIPHY API key. Add VITE_GIPHY_API_KEY in .env, then rebuild and deploy.</span>';
+    return;
+  }
+
   results.innerHTML = '<span class="soft-note">Loading GIFs...</span>';
 
   try {
-    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${encodeURIComponent(tenorKey)}&client_key=pixora_social&limit=12&media_filter=gif,tinygif`;
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(giphyKey)}&q=${encodeURIComponent(query)}&limit=16&rating=g&lang=en`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error('Could not load Tenor GIFs.');
-    const data = await response.json();
-    const gifs = data.results || [];
 
-    results.innerHTML = gifs.length
-      ? gifs.map((gif) => {
-        const src = gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url || '';
-        return `<button type="button" data-gif-url="${escapeHTML(src)}" data-gif-title="${escapeHTML(gif.content_description || 'GIF')}"><img src="${escapeHTML(src)}" alt="${escapeHTML(gif.content_description || 'GIF')}" loading="lazy" /></button>`;
-      }).join('')
-      : '<span class="soft-note">No GIFs found.</span>';
+    if (!response.ok) {
+      throw new Error(`GIPHY request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const gifs = data.data || [];
+
+    if (!gifs.length) {
+      results.innerHTML = '<span class="soft-note">No GIFs found. Try another word.</span>';
+      return;
+    }
+
+    results.innerHTML = gifs.map((gif) => {
+      const src =
+        gif.images?.fixed_height_small?.url ||
+        gif.images?.downsized_medium?.url ||
+        gif.images?.original?.url ||
+        '';
+
+      if (!src) return '';
+
+      return `
+        <button type="button" data-gif-url="${escapeHTML(src)}" data-gif-title="${escapeHTML(gif.title || 'GIF')}">
+          <img src="${escapeHTML(src)}" alt="${escapeHTML(gif.title || 'GIF')}" loading="lazy" />
+        </button>
+      `;
+    }).join('');
 
     $$('[data-gif-url]', results).forEach((button) => {
-      button.addEventListener('click', () => sendGif(button.dataset.gifUrl, button.dataset.gifTitle));
+      button.addEventListener('click', () => {
+        sendGif(button.dataset.gifUrl, button.dataset.gifTitle);
+      });
     });
   } catch (error) {
-    results.innerHTML = '<span class="soft-note">GIF search needs internet access and a valid Tenor key.</span>';
+    console.error(error);
+    results.innerHTML = '<span class="soft-note">GIF search failed. Check your GIPHY API key and browser console.</span>';
   }
 }
 
