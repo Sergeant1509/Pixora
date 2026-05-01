@@ -82,3 +82,12 @@ export async function updateUserProfile(uid, data) {
 
   return user;
 }
+
+
+export async function updateUserMeta(uid, data = {}) {
+  if (!uid) return;
+  await updateDoc(doc(db, 'users', uid), {
+    ...data,
+    updatedAt: serverTimestamp()
+  });
+}

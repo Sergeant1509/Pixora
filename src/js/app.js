@@ -1,5 +1,5 @@
 import { deleteCurrentUserAccount, listenToAuth, logoutUser } from './services/auth.service.js';
-import { getUserById, getUserByUsername, listenToUser, listenToUsers, updateUserProfile } from './services/user.service.js';
+import { getUserById, getUserByUsername, listenToUser, listenToUsers, updateUserMeta, updateUserProfile } from './services/user.service.js';
 import {
   addComment,
   updateComment,
@@ -15,7 +15,7 @@ import {
 } from './services/post.service.js';
 import { followUser, getFollowStats, listenToFollowers, listenToFollowing, listenToFollowList, listenToFollowStats, removeFollower, unfollowUser } from './services/social.service.js';
 import { listenToConversations, listenToMessages, openConversation, sendMessage } from './services/chat.service.js';
-import { listenToNotifications, markNotificationsRead, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
+import { listenToNotifications, markNotificationsRead, notifyCommentLike, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
 import { cropImageFileToDataUrl, uploadAvatar, uploadCoverImage, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
 import { REPORT_GROUPS, banMessage, blockUser, getBanInfo, listenToBlocked, registerContentViolation, scanContent, submitReport } from './services/moderation.service.js';
 import { $, $$, avatarTemplate, emptyState, escapeHTML, setButtonLoading } from './utils/dom.js';
@@ -55,6 +55,54 @@ function saveFeedSuggestionPreference(value) {
   if (key) localStorage.setItem(key, String(Boolean(value)));
 }
 
+function shouldShowFeedIntro() {
+  return Boolean(state.profile?.uid) && !Boolean(state.profile?.feedIntroSeen);
+}
+
+async function markFeedIntroSeen() {
+  if (!state.profile?.uid || state.profile.feedIntroSeen) return;
+
+  state.profile = { ...state.profile, feedIntroSeen: true };
+  if (state.feedIntroTimer) clearTimeout(state.feedIntroTimer);
+  state.feedIntroTimer = null;
+  if (state.feedIntroScrollHandler) {
+    window.removeEventListener('scroll', state.feedIntroScrollHandler);
+    document.querySelector('.workspace')?.removeEventListener('scroll', state.feedIntroScrollHandler);
+    state.feedIntroScrollHandler = null;
+  }
+
+  renderPosts();
+
+  try {
+    await updateUserMeta(state.profile.uid, { feedIntroSeen: true });
+  } catch (error) {
+    console.warn('Could not save feed intro preference:', error);
+  }
+}
+
+function bindFeedIntroDismissal(container) {
+  const card = container?.querySelector('[data-feed-intro-card]');
+  if (!card || state.profile?.feedIntroSeen) return;
+
+  $('[data-feed-intro-dismiss]', card)?.addEventListener('click', () => {
+    markFeedIntroSeen();
+  });
+
+  if (state.feedIntroTimer) clearTimeout(state.feedIntroTimer);
+  if (state.feedIntroScrollHandler) {
+    window.removeEventListener('scroll', state.feedIntroScrollHandler);
+    document.querySelector('.workspace')?.removeEventListener('scroll', state.feedIntroScrollHandler);
+  }
+
+  state.feedIntroTimer = setTimeout(() => markFeedIntroSeen(), 8500);
+  state.feedIntroScrollHandler = () => {
+    const workspaceScroll = document.querySelector('.workspace')?.scrollTop || 0;
+    if (window.scrollY > 80 || workspaceScroll > 80) markFeedIntroSeen();
+  };
+  window.addEventListener('scroll', state.feedIntroScrollHandler, { passive: true });
+  document.querySelector('.workspace')?.addEventListener('scroll', state.feedIntroScrollHandler, { passive: true });
+}
+
 function getSuggestedFollowUsers(limit = 5) {
   if (!state.profile) return [];
 
@@ -70,13 +118,105 @@ function getSuggestedFollowUsers(limit = 5) {
     .slice(0, limit);
 }
 
-function getFollowingFeedPosts() {
-  if (!state.profile) return [];
+function getPostEngagement(post = {}) {
+  const savedCount = Array.isArray(post.savedBy) ? post.savedBy.length : 0;
+  return (Number(post.likeCount || 0) * 3)
+    + (Number(post.commentCount || 0) * 5)
+    + (Number(post.shareCount || 0) * 6)
+    + (savedCount * 4);
+}
 
-  return state.posts.filter((post) => {
-    if (state.blocked.has(post.authorId)) return false;
-    return state.following.has(post.authorId);
+function getPostAgeHours(post = {}) {
+  const created = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt || Date.now());
+  const time = created instanceof Date && !Number.isNaN(created.getTime()) ? created.getTime() : Date.now();
+  return Math.max(0.25, (Date.now() - time) / 36e5);
+}
+
+function getViralScore(post = {}) {
+  const engagement = getPostEngagement(post);
+  const ageHours = getPostAgeHours(post);
+  const recencyBoost = Math.max(0, 18 - ageHours) * 0.7;
+  const velocity = engagement / Math.pow(ageHours + 2, 0.65);
+  const creatorBoost = post.authorId === state.profile?.uid && ageHours < 48 ? 4 : 0;
+  return Number((velocity + recencyBoost + creatorBoost).toFixed(2));
+}
+
+function isTrendingPost(post = {}) {
+  if (!state.profile || state.blocked.has(post.authorId)) return false;
+  if (post.authorId === state.profile.uid || state.following.has(post.authorId)) return false;
+
+  const ageHours = getPostAgeHours(post);
+  const engagement = getPostEngagement(post);
+  const score = getViralScore(post);
+
+  return ageHours <= 168 && (score >= 6 || engagement >= 12 || Number(post.shareCount || 0) >= 2);
+}
+
+function sortFeedPosts(posts = []) {
+  return [...posts].sort((a, b) => {
+    const aOwnBoost = a.authorId === state.profile?.uid ? 18 : 0;
+    const bOwnBoost = b.authorId === state.profile?.uid ? 18 : 0;
+    const scoreDiff = (getViralScore(b) + bOwnBoost) - (getViralScore(a) + aOwnBoost);
+    if (Math.abs(scoreDiff) > 1.5) return scoreDiff;
+
+    const aCreated = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+    const bCreated = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+    return bCreated - aCreated;
   });
+}
+
+function getPersonalizedFeedPosts() {
+  if (!state.profile) return { posts: [], ownPosts: [], followedPosts: [], trendingPosts: [] };
+
+  const cleanPosts = state.posts.filter((post) => post.authorId && !state.blocked.has(post.authorId));
+  const ownPosts = cleanPosts.filter((post) => post.authorId === state.profile.uid);
+  const followedPosts = cleanPosts.filter((post) => state.following.has(post.authorId));
+  const trendingPosts = sortFeedPosts(cleanPosts.filter(isTrendingPost));
+
+  if (!state.following.size) {
+    return {
+      posts: sortFeedPosts(ownPosts),
+      ownPosts,
+      followedPosts,
+      trendingPosts: []
+    };
+  }
+
+  const baseFeed = sortFeedPosts([...ownPosts, ...followedPosts]);
+  const merged = [];
+  const usedIds = new Set();
+  let trendingIndex = 0;
+
+  baseFeed.forEach((post, index) => {
+    if (!usedIds.has(post.id)) {
+      merged.push({ ...post, feedReason: post.authorId === state.profile.uid ? 'Your post' : '' });
+      usedIds.add(post.id);
+    }
+
+    const shouldInsertTrending = (index + 1) % 5 === 0 || (baseFeed.length < 4 && index === baseFeed.length - 1);
+    if (shouldInsertTrending && trendingPosts[trendingIndex]) {
+      const trend = trendingPosts[trendingIndex++];
+      if (trend && !usedIds.has(trend.id)) {
+        merged.push({ ...trend, feedReason: 'Trending' });
+        usedIds.add(trend.id);
+      }
+    }
+  });
+
+  while (merged.length < 8 && trendingPosts[trendingIndex]) {
+    const trend = trendingPosts[trendingIndex++];
+    if (!usedIds.has(trend.id)) {
+      merged.push({ ...trend, feedReason: 'Trending' });
+      usedIds.add(trend.id);
+    }
+  }
+
+  return {
+    posts: merged,
+    ownPosts,
+    followedPosts,
+    trendingPosts
+  };
 }
 
 const state = {
@@ -89,6 +229,8 @@ const state = {
   followers: new Set(),
   feedSuggestionSelection: new Set(),
   feedSuggestionsSkipped: false,
+  feedIntroTimer: null,
+  feedIntroScrollHandler: null,
   conversations: [],
   notifications: [],
   blocked: new Set(),
@@ -484,6 +626,13 @@ function cleanupRealtimeListeners() {
   state.followers = new Set();
   state.feedSuggestionSelection = new Set();
   state.feedSuggestionsSkipped = false;
+  if (state.feedIntroTimer) clearTimeout(state.feedIntroTimer);
+  if (state.feedIntroScrollHandler) {
+    window.removeEventListener('scroll', state.feedIntroScrollHandler);
+    document.querySelector('.workspace')?.removeEventListener('scroll', state.feedIntroScrollHandler);
+  }
+  state.feedIntroTimer = null;
+  state.feedIntroScrollHandler = null;
   state.conversations = [];
   state.notifications = [];
   state.blocked = new Set();
@@ -758,18 +907,37 @@ function renderFollowModal() {
 function renderPosts() {
   if (!views.postsList || !state.profile) return;
 
-  const visiblePosts = getFollowingFeedPosts();
+  const feed = getPersonalizedFeedPosts();
 
-  if (!state.following.size && !visiblePosts.length && !state.feedSuggestionsSkipped) {
+  if (!state.following.size && !feed.posts.length && !state.feedSuggestionsSkipped) {
     renderFollowStarterPanel();
     return;
   }
 
-  renderPostsInto(views.postsList, visiblePosts, {
-    emptyTitle: state.following.size ? 'No posts from people you follow yet' : 'Follow some accounts to show posts',
-    emptyBody: state.following.size
-      ? 'When the people you follow publish something, their posts will appear here.'
-      : 'Your home feed only shows posts from accounts you follow. Explore creators or use the suggestions below to start.'
+  if (!state.following.size && feed.posts.length) {
+    renderPostsInto(views.postsList, feed.posts, {
+      intro: shouldShowFeedIntro() ? {
+        kicker: 'Your feed',
+        title: 'Your posts are live',
+        body: 'Because you are not following anyone yet, your home feed shows your own posts. Follow a few accounts to start seeing more updates.',
+        dismissible: true
+      } : null,
+      showSuggestionsAfter: !state.feedSuggestionsSkipped,
+      emptyTitle: 'No posts yet',
+      emptyBody: 'Create your first post or follow accounts from Discover.'
+    });
+    return;
+  }
+
+  renderPostsInto(views.postsList, feed.posts, {
+    intro: shouldShowFeedIntro() ? {
+      kicker: 'Personalized feed',
+      title: 'Posts from your circle',
+      body: 'Your feed is based on people you follow, your own recent posts, and occasional trending posts with strong engagement.',
+      dismissible: true
+    } : null,
+    emptyTitle: 'Your feed is quiet',
+    emptyBody: 'Posts from people you follow will appear here. Your own posts will also show up after you publish them.'
   });
 }
 
@@ -876,14 +1044,80 @@ function renderPostsInto(container, posts, options = {}) {
     return;
   }
 
-  container.innerHTML = posts.map((post) => postTemplate(post)).join('');
+  const introMarkup = options.intro ? `
+    <section class="feed-algorithm-card glass-card reveal-up" data-feed-intro-card>
+      <button class="feed-intro-dismiss" type="button" data-feed-intro-dismiss aria-label="Hide feed note">×</button>
+      <span class="muted-label">${escapeHTML(options.intro.kicker || 'Feed')}</span>
+      <h3>${escapeHTML(options.intro.title || 'Your feed')}</h3>
+      <p>${escapeHTML(options.intro.body || '')}</p>
+    </section>
+  ` : '';
+
+  const suggestionsMarkup = options.showSuggestionsAfter ? miniFollowSuggestionsTemplate() : '';
+
+  container.innerHTML = `${introMarkup}${posts.map((post) => postTemplate(post)).join('')}${suggestionsMarkup}`;
   bindPostActions(container);
+  bindMiniFollowSuggestions(container);
+  bindFeedIntroDismissal(container);
 
   state.openComments.forEach((postId) => {
     if (container.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) {
       attachCommentListener(postId);
       renderCommentsForPost(postId);
     }
+  });
+}
+
+function miniFollowSuggestionsTemplate() {
+  const suggestions = getSuggestedFollowUsers(5);
+  if (!suggestions.length) return '';
+
+  return `
+    <section class="mini-follow-suggestions glass-card reveal-up">
+      <div>
+        <span class="muted-label">Suggested accounts</span>
+        <h3>Follow accounts to improve your feed</h3>
+      </div>
+      <div class="mini-suggestion-list">
+        ${suggestions.map((user) => `
+          <article class="mini-suggestion-card">
+            <button class="suggested-person as-button" type="button" data-mini-suggest-profile="${escapeHTML(user.uid)}">
+              ${avatarTemplate(user)}
+              <span>
+                <strong>${escapeHTML(user.displayName || 'User')}</strong>
+                <small>@${escapeHTML(user.username || 'user')} · ${formatCount(user.followersCount || 0)} followers</small>
+              </span>
+            </button>
+            <button class="suggest-toggle selected" type="button" data-mini-follow="${escapeHTML(user.uid)}">Follow</button>
+          </article>
+        `).join('')}
+      </div>
+      <button class="ghost-btn" type="button" data-hide-mini-suggestions>Not now</button>
+    </section>
+  `;
+}
+
+function bindMiniFollowSuggestions(container) {
+  $$('[data-mini-suggest-profile]', container).forEach((button) => {
+    button.addEventListener('click', () => openUserProfile(button.dataset.miniSuggestProfile));
+  });
+
+  $$('[data-mini-follow]', container).forEach((button) => {
+    button.addEventListener('click', async () => {
+      const user = findUser(button.dataset.miniFollow);
+      if (!user) return;
+      try {
+        await followUser(state.profile, user);
+        showToast(`Following ${user.displayName || user.username || 'user'}.`);
+      } catch (error) {
+        showToast(friendlyError(error), 'error');
+      }
+    });
+  });
+
+  $('[data-hide-mini-suggestions]', container)?.addEventListener('click', () => {
+    saveFeedSuggestionPreference(true);
+    renderPosts();
   });
 }
 
@@ -894,9 +1128,13 @@ function postTemplate(post) {
   const saved = post.savedBy.includes(uid);
   const commentsOpen = state.openComments.has(post.id);
   const media = mediaTemplate(post);
+  const feedBadge = post.feedReason
+    ? `<span class="feed-reason-badge ${post.feedReason === 'Trending' ? 'trending' : 'own'}">${escapeHTML(post.feedReason)}</span>`
+    : '';
 
   return `
     <article class="post-card" data-post-id="${escapeHTML(post.id)}">
+      ${feedBadge}
       <header class="post-header">
         <button class="post-author as-button" type="button" data-open-profile="${escapeHTML(post.authorId)}">
           ${avatarTemplate({ displayName: post.authorName, username: post.authorUsername, avatarUrl: post.authorAvatarUrl })}
@@ -1332,10 +1570,16 @@ async function openReportFlow({ targetUser, targetComment = null, post = null, t
 async function toggleCommentLikeFromElement(postId, item) {
   const commentId = item?.dataset.commentId;
   const comment = findComment(postId, commentId);
+  const post = state.posts.find((entry) => entry.id === postId);
   if (!comment) return;
+
+  const addingLike = !Array.isArray(comment.likedBy) || !comment.likedBy.includes(state.profile.uid);
 
   try {
     await toggleCommentLike(postId, comment, state.profile.uid);
+    if (addingLike) {
+      notifyCommentLike(post, comment, state.profile).catch((error) => console.warn('Comment like notification failed:', error));
+    }
   } catch (error) {
     showToast(friendlyError(error), 'error');
   }
@@ -1449,6 +1693,9 @@ function notificationTemplate(notification) {
     body = notification.commentText || notification.postPreview || 'Open your post';
   } else if (notification.type === 'comment_mention') {
     title = `${latestActor.displayName || notification.latestActorName} mentioned you in a comment`;
+    body = notification.commentText || notification.postPreview || 'Open the post';
+  } else if (notification.type === 'comment_like') {
+    title = `${latestActor.displayName || notification.latestActorName} liked your comment`;
     body = notification.commentText || notification.postPreview || 'Open the post';
   } else if (notification.type === 'account_ban') {
     title = 'Your account has a temporary safety limit';

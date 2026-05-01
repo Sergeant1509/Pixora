@@ -106,6 +106,32 @@ export async function notifyCommentMention(post, actor, mentionedUser, commentTe
   });
 }
 
+
+export async function notifyCommentLike(post, comment, actor) {
+  if (!post?.id || !comment?.id || !comment.authorId || !actor?.uid || comment.authorId === actor.uid) return;
+
+  const notificationRef = doc(db, 'users', comment.authorId, 'notifications', `comment_like_${post.id}_${comment.id}`);
+  const nextLikeCount = Array.isArray(comment.likedBy) ? comment.likedBy.length + 1 : Number(comment.likeCount || 0) + 1;
+
+  await setDoc(notificationRef, {
+    type: 'comment_like',
+    postId: post.id,
+    commentId: comment.id,
+    recipientId: comment.authorId,
+    actorIds: arrayUnion(actor.uid),
+    actorCount: Math.max(1, nextLikeCount),
+    latestActorId: actor.uid,
+    latestActorName: cleanText(actor.displayName || actor.username || 'Someone', 50),
+    latestActorUsername: cleanText(actor.username || 'user', 30),
+    latestActorAvatarUrl: cleanText(actor.avatarUrl || '', 420000),
+    postPreview: cleanText(post.content || 'your post', 140),
+    commentText: cleanText(comment.text || 'your comment', 140),
+    read: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
 export async function markNotificationsRead(uid) {
   if (!uid) return;
 
@@ -137,6 +163,7 @@ function normalizeNotification(notification = {}) {
     id: String(notification.id || ''),
     type: notification.type || 'general',
     postId: String(notification.postId || ''),
+    commentId: String(notification.commentId || ''),
     recipientId: String(notification.recipientId || ''),
     actorIds: Array.isArray(notification.actorIds) ? notification.actorIds.map(String) : [],
     actorCount: Number(notification.actorCount || (Array.isArray(notification.actorIds) ? notification.actorIds.length : 0)),

@@ -339,7 +339,7 @@
 
 .post-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.55rem;
   margin-top: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -752,7 +752,7 @@
 
 .profile-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.75rem;
   margin-top: 1rem;
 }
@@ -856,7 +856,7 @@
 
   .main-nav {
     flex: 1;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     margin: 0;
   }
 
@@ -1610,7 +1610,7 @@
   .main-nav {
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.25rem;
     margin: 0;
   }
@@ -1683,7 +1683,7 @@
   }
 
   .post-actions {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .action-btn {
@@ -2426,5 +2426,150 @@ button.profile-stat:hover {
   .follow-onboarding-actions .primary-btn,
   .follow-onboarding-actions .ghost-btn {
     width: 100%;
+  }
+}
+
+/* Personalized and trending feed upgrade */
+.feed-algorithm-card,
+.mini-follow-suggestions {
+  padding: 1rem 1.1rem;
+  border-radius: 1.35rem;
+  display: grid;
+  gap: .45rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.feed-algorithm-card::before,
+.mini-follow-suggestions::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 10% 0%, rgba(128, 92, 255, .16), transparent 35%),
+    radial-gradient(circle at 95% 20%, rgba(17, 201, 231, .14), transparent 38%);
+  pointer-events: none;
+}
+
+.feed-algorithm-card > *,
+.mini-follow-suggestions > * {
+  position: relative;
+  z-index: 1;
+}
+
+.feed-algorithm-card h3,
+.mini-follow-suggestions h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -.03em;
+}
+
+.feed-algorithm-card p {
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 760px;
+}
+
+.feed-reason-badge {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: .35rem;
+  margin-bottom: .65rem;
+  padding: .35rem .7rem;
+  border-radius: 999px;
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .12);
+}
+
+.feed-reason-badge.trending {
+  background: linear-gradient(135deg, rgba(255, 122, 89, .35), rgba(255, 45, 125, .22));
+  border-color: rgba(255, 122, 89, .35);
+}
+
+.feed-reason-badge.own {
+  background: linear-gradient(135deg, rgba(123, 92, 255, .35), rgba(17, 201, 231, .22));
+  border-color: rgba(123, 92, 255, .4);
+}
+
+.mini-suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: .75rem;
+  margin-top: .4rem;
+}
+
+.mini-suggestion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 1rem;
+  background: rgba(255,255,255,.045);
+}
+
+@media (max-width: 640px) {
+  .mini-suggestion-list {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-suggestion-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+
+.feed-algorithm-card {
+  position: relative;
+}
+
+.feed-intro-dismiss {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.feed-intro-dismiss:hover {
+  background: rgba(255,255,255,.12);
+}
+
+
+/* Mobile nav six item fix */
+@media (max-width: 900px) {
+  .main-nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 0.14rem !important;
+  }
+
+  .nav-link,
+  .app-shell.sidebar-collapsed .nav-link {
+    min-height: 50px;
+    border-radius: 15px;
+  }
+
+  .nav-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 0.86rem;
+  }
+
+  .nav-badge {
+    right: 0.2rem;
+    top: 0.2rem;
   }
 }
