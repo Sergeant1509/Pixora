@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101014" />
+    <title>Sign up — Pixora</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/css/variables.css" />
+    <link rel="stylesheet" href="/src/css/base.css" />
+    <link rel="stylesheet" href="/src/css/auth.css" />
+    <link rel="stylesheet" href="/src/css/animations.css" />
+  </head>
+  <body>
+    <div class="ambient-bg" aria-hidden="true">
+      <span class="orb orb-one"></span>
+      <span class="orb orb-two"></span>
+      <span class="orb orb-three"></span>
+      <span class="grain"></span>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <main class="auth-screen">
+      <section class="auth-hero reveal-up">
+        <a class="brand-line" href="/signin.html" aria-label="Pixora home">
+          <img src="/src/assets/pulse-mark.svg" alt="Pixora" class="brand-mark" />
+          <span>Pixora</span>
+        </a>
+
+        <div class="hero-copy">
+          <span class="eyebrow">Join Pixora</span>
+          <h1>Start sharing with people who matter.</h1>
+          <p>
+            Create a profile, discover people, share photos, and talk privately without the noise.
+          </p>
+        </div>
+
+        <div class="hero-card floating-card">
+          <div class="mini-profile">
+            <div class="avatar-sheen"></div>
+            <div>
+              <strong>Your profile, your presence</strong>
+              <span>Choose a name and username that friends can recognize.</span>
+            </div>
+          </div>
+          <div class="pulse-lines">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="auth-panel reveal-up delay-1" aria-label="Create account">
+        <span class="muted-label">Join Pixora</span>
+        <h2>Create account</h2>
+        <p class="auth-subtitle">Set up your identity and start building your social circle.</p>
+
+        <form id="signup-form" class="auth-form active" method="post" action="#">
+          <div class="field-grid">
+            <label>
+              Name
+              <input type="text" name="displayName" autocomplete="name" placeholder="Your name" maxlength="32" required />
+            </label>
+            <label>
+              Username
+              <input type="text" name="username" autocomplete="username" placeholder="username" minlength="3" maxlength="20" required />
+            </label>
+          </div>
+          <label>
+            Email
+            <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" autocomplete="new-password" placeholder="Minimum 6 characters" minlength="6" required />
+          </label>
+          <button class="primary-btn full" type="submit">Create account</button>
+          <div class="auth-divider"><span>or</span></div>
+          <button id="google-signup" class="google-btn full" type="button"><span class="google-mark">G</span> Continue with Google</button>
+        </form>
+
+        <p class="auth-alt">Already have an account? <a href="/signin.html">Sign in</a></p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/js/pages/signup.js"></script>
+  </body>
+</html>

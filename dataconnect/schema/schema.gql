@@ -1,0 +1,35 @@
+type User @table {
+  username: String!
+  email: String!
+  passwordHash: String!
+  createdAt: Timestamp!
+  displayName: String
+  bio: String
+  profilePictureUrl: String
+}
+
+type Chirp @table {
+  content: String!
+  createdAt: Timestamp!
+  imageUrl: String
+  author: User
+}
+
+type Follow @table(key: ["follower", "followee"]) {
+  follower: User!
+  followee: User!
+  createdAt: Timestamp!
+}
+
+type Like @table(key: ["user", "chirp"]) {
+  user: User!
+  chirp: Chirp!
+  createdAt: Timestamp!
+}
+
+type Comment @table {
+  content: String!
+  createdAt: Timestamp!
+  author: User
+  chirp: Chirp
+}

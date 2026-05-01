@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101014" />
+    <title>Sign in — Pixora</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/css/variables.css" />
+    <link rel="stylesheet" href="/src/css/base.css" />
+    <link rel="stylesheet" href="/src/css/auth.css" />
+    <link rel="stylesheet" href="/src/css/animations.css" />
+  </head>
+  <body>
+    <div class="ambient-bg" aria-hidden="true">
+      <span class="orb orb-one"></span>
+      <span class="orb orb-two"></span>
+      <span class="orb orb-three"></span>
+      <span class="grain"></span>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <main class="auth-screen">
+      <section class="auth-hero reveal-up">
+        <a class="brand-line" href="/signin.html" aria-label="Pixora home">
+          <img src="/src/assets/pulse-mark.svg" alt="Pixora" class="brand-mark" />
+          <span>Pixora</span>
+        </a>
+
+        <div class="hero-copy">
+          <span class="eyebrow">Welcome to Pixora</span>
+          <h1>Come back to the people and moments you care about.</h1>
+          <p>
+            Post updates, follow friends, and keep every conversation moving in one clean space.
+          </p>
+        </div>
+
+        <div class="hero-card floating-card">
+          <div class="mini-profile">
+            <div class="avatar-sheen"></div>
+            <div>
+              <strong>Built around real activity</strong>
+              <span>Your home updates as your network shares, replies, and messages.</span>
+            </div>
+          </div>
+          <div class="pulse-lines">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="auth-panel reveal-up delay-1" aria-label="Sign in">
+        <span class="muted-label">Welcome back</span>
+        <h2>Sign in</h2>
+        <p class="auth-subtitle">Access your feed, inbox, saved posts, and profile.</p>
+
+        <form id="signin-form" class="auth-form active" method="post" action="#">
+          <label>
+            Email
+            <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required />
+          </label>
+          <button class="primary-btn full" type="submit">Sign in</button>
+          <div class="auth-divider"><span>or</span></div>
+          <button id="google-signin" class="google-btn full" type="button"><span class="google-mark">G</span> Continue with Google</button>
+        </form>
+
+        <p class="auth-alt">New here? <a href="/signup.html">Create an account</a></p>
+      </section>
+    </main>
+
+    <script type="module" src="/src/js/pages/signin.js"></script>
+  </body>
+</html>

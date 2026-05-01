@@ -1,0 +1,18 @@
+{
+  "name": "pixora-social-firebase",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Advanced Spark-safe Firebase social app with profiles, posts, comments, saves, sharing, and realtime chat.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && firebase deploy"
+  },
+  "dependencies": {
+    "firebase": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {}
+}

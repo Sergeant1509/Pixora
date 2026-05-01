@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101014" />
+    <title>Pixora — Social App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/css/variables.css" />
+    <link rel="stylesheet" href="/src/css/base.css" />
+    <link rel="stylesheet" href="/src/css/app.css" />
+    <link rel="stylesheet" href="/src/css/animations.css" />
+  </head>
+  <body>
+    <div class="ambient-bg" aria-hidden="true">
+      <span class="orb orb-one"></span>
+      <span class="orb orb-two"></span>
+      <span class="orb orb-three"></span>
+      <span class="grain"></span>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <main id="app-shell" class="app-shell sidebar-collapsed hidden">
+      <aside class="sidebar reveal-left" aria-label="Sidebar">
+        <div class="sidebar-top">
+          <div class="brand-stack">
+            <img src="/src/assets/pulse-mark.svg" alt="Pixora" class="brand-mark" />
+            <div class="sidebar-label">
+              <strong>Pixora</strong>
+              <span>Social studio</span>
+            </div>
+          </div>
+          <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Expand sidebar" title="Expand sidebar">•••</button>
+        </div>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-link active" type="button" data-view-target="feed" title="Feed"><span class="nav-icon">⌂</span><span class="nav-text">Feed</span></button>
+          <button class="nav-link" type="button" data-view-target="discover" title="Discover"><span class="nav-icon">⌕</span><span class="nav-text">Discover</span></button>
+          <button class="nav-link" type="button" data-view-target="messages" title="Messages"><span class="nav-icon">✉</span><span class="nav-text">Messages</span></button>
+          <button class="nav-link" type="button" data-view-target="profile" title="Profile"><span class="nav-icon">◉</span><span class="nav-text">Profile</span></button>
+          <button class="nav-link" type="button" data-view-target="settings" title="Settings"><span class="nav-icon">⚙</span><span class="nav-text">Settings</span></button>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar reveal-down">
+          <div class="topbar-left">
+            <div>
+              <span id="topbar-kicker" class="muted-label">Welcome back</span>
+              <h2 id="topbar-title">Feed</h2>
+            </div>
+          </div>
+          <button id="current-user-chip" class="user-chip" type="button" data-view-target="profile" aria-label="Open your profile"></button>
+        </header>
+
+        <section id="feed-view" class="view active" data-view="feed">
+          <form id="post-form" class="composer glass-card reveal-up" enctype="multipart/form-data">
+            <div id="composer-avatar" class="avatar"></div>
+            <div class="composer-body">
+              <textarea name="content" rows="4" maxlength="800" placeholder="Share an update with your circle..."></textarea>
+              <div id="media-preview" class="media-preview hidden"></div>
+              <div class="composer-actions">
+                <label class="upload-chip">
+                  <input id="post-media" name="mediaFile" type="file" accept="image/*" />
+                  <span>＋ Photo</span>
+                </label>
+                <span id="post-count" class="soft-note">0 / 800</span>
+                <button class="primary-btn" type="submit">Publish</button>
+              </div>
+            </div>
+          </form>
+          <div id="posts-list" class="posts-list"></div>
+        </section>
+
+        <section id="discover-view" class="view" data-view="discover">
+          <div class="section-heading">
+            <div>
+              <span class="muted-label">People</span>
+              <h2>Discover creators</h2>
+            </div>
+            <input id="people-search" class="search-input" type="search" placeholder="Search by name or username" />
+          </div>
+          <div id="people-list" class="people-grid"></div>
+        </section>
+
+        <section id="messages-view" class="view" data-view="messages">
+          <div class="messenger glass-card">
+            <aside class="chat-sidebar">
+              <div class="chat-section-title">Conversations</div>
+              <div id="conversation-list" class="conversation-list"></div>
+            </aside>
+
+            <section class="chat-panel">
+              <div id="chat-empty" class="empty-chat">
+                <div class="empty-icon">✦</div>
+                <h3>Start a real conversation</h3>
+                <p>Open a profile or Discover card to message someone. Only chats with real messages appear here.</p>
+              </div>
+
+              <div id="chat-active" class="chat-active hidden">
+                <header id="chat-header" class="chat-header"></header>
+                <div id="messages-list" class="messages-list"></div>
+                <div id="chat-tools" class="chat-tools hidden"></div>
+                <form id="message-form" class="message-form" enctype="multipart/form-data">
+                  <button id="emoji-toggle" class="chat-tool-btn" type="button" title="Emoji">😊</button>
+                  <button id="gif-toggle" class="chat-tool-btn" type="button" title="GIF">GIF</button>
+                  <label class="chat-tool-btn" title="Send image">
+                    🖼
+                    <input id="message-image" name="imageFile" type="file" accept="image/*" />
+                  </label>
+                  <input name="message" type="text" autocomplete="off" maxlength="1000" placeholder="Write a message..." />
+                  <button class="primary-btn" type="submit">Send</button>
+                </form>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="profile-view" class="view" data-view="profile">
+          <div class="profile-page">
+            <section id="profile-hero" class="profile-hero glass-card reveal-up"></section>
+            <section class="profile-posts glass-card reveal-up">
+              <div class="section-heading compact">
+                <div>
+                  <span id="profile-posts-kicker" class="muted-label">Timeline</span>
+                  <h2 id="profile-posts-title">Posts</h2>
+                </div>
+              </div>
+              <div id="profile-posts-list" class="mini-post-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="settings-view" class="view" data-view="settings">
+          <div class="settings-layout">
+            <section class="settings-card glass-card reveal-up">
+              <div class="section-heading compact">
+                <div>
+                  <span class="muted-label">Account</span>
+                  <h2>Profile settings</h2>
+                </div>
+              </div>
+              <form id="profile-form" class="settings-form" enctype="multipart/form-data">
+                <div class="avatar-editor-row">
+                  <div id="settings-avatar-preview" class="avatar xl"></div>
+                  <label class="upload-chip">
+                    <input id="avatar-file" type="file" name="avatarFile" accept="image/*" />
+                    <span>Change photo</span>
+                  </label>
+                </div>
+                <input type="hidden" name="avatarUrl" />
+                <div class="field-grid">
+                  <label>
+                    Display name
+                    <input type="text" name="displayName" maxlength="32" required />
+                  </label>
+                  <label>
+                    Username
+                    <input type="text" name="username" minlength="3" maxlength="20" required />
+                  </label>
+                </div>
+                <label>
+                  Bio
+                  <textarea name="bio" rows="4" maxlength="180" placeholder="Add a short bio for your profile."></textarea>
+                </label>
+                <button class="primary-btn" type="submit">Save changes</button>
+              </form>
+            </section>
+
+            <section class="settings-card glass-card reveal-up">
+              <div class="section-heading compact">
+                <div>
+                  <span class="muted-label">Library</span>
+                  <h2>Saved posts</h2>
+                </div>
+              </div>
+              <div id="saved-posts-list" class="mini-post-list"></div>
+            </section>
+
+            <section class="settings-card danger-zone glass-card reveal-up">
+              <div>
+                <span class="muted-label">Security</span>
+                <h2>Account controls</h2>
+                <p>Log out of this device or permanently delete your Pixora account.</p>
+              </div>
+              <div class="settings-actions">
+                <button id="settings-logout" class="ghost-btn" type="button">Log out</button>
+                <button id="delete-account" class="ghost-btn danger" type="button">Delete account</button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="avatar-crop-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Crop profile photo">
+      <div class="modal-card crop-card">
+        <div class="modal-header">
+          <div>
+            <span class="muted-label">Profile photo</span>
+            <h3>Crop and rotate</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-crop>×</button>
+        </div>
+        <div class="crop-stage">
+          <img id="crop-image" alt="Selected profile photo" />
+          <span class="crop-circle"></span>
+        </div>
+        <div class="crop-controls">
+          <label>Zoom <input id="crop-zoom" type="range" min="1" max="2.8" value="1" step="0.05" /></label>
+          <label>Move X <input id="crop-x" type="range" min="-100" max="100" value="0" step="1" /></label>
+          <label>Move Y <input id="crop-y" type="range" min="-100" max="100" value="0" step="1" /></label>
+          <button id="crop-rotate" class="ghost-btn" type="button">Rotate 90°</button>
+        </div>
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" data-close-crop>Cancel</button>
+          <button id="save-crop" class="primary-btn" type="button">Use photo</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="share-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Share post">
+      <div class="modal-card share-card">
+        <div class="modal-header">
+          <div>
+            <span class="muted-label">Share</span>
+            <h3>Send this post</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-share>×</button>
+        </div>
+        <div class="share-link-box"><input id="share-link-field" type="text" readonly aria-label="Post link" /></div>
+        <button id="copy-post-link" class="ghost-btn full" type="button">Copy post link</button>
+        <div class="share-list-title">Send to people</div>
+        <div id="share-users-list" class="share-users-list"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/js/app.js"></script>
+  </body>
+</html>
