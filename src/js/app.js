@@ -244,6 +244,10 @@ const state = {
   openComments: new Set(),
   commentsByPost: new Map(),
   commentUnsubscribers: new Map(),
+  reelOrder: [],
+  reelOrderSignature: '',
+  reelOrderLoadedFor: '',
+  reelSeenPostIds: new Set(),
   unsubscribers: [],
   unsubscribeMessages: null,
   unsubscribeProfileStats: null,
@@ -272,6 +276,10 @@ const views = {
   conversationList: $('#conversation-list'),
   notificationsList: $('#notifications-list'),
   notificationBadge: $('#notification-badge'),
+  topbarNotificationsBtn: $('#topbar-notifications-btn'),
+  topbarNotificationBadge: $('#topbar-notification-badge'),
+  homeNotificationsBtn: $('#home-notifications-btn'),
+  homeNotificationBadge: $('#home-notification-badge'),
   markNotificationsRead: $('#mark-notifications-read'),
   chatEmpty: $('#chat-empty'),
   chatActive: $('#chat-active'),
@@ -343,6 +351,8 @@ function bindStaticEvents() {
   });
 
   views.userChip?.addEventListener('click', () => openUserProfile(state.profile?.uid));
+  views.topbarNotificationsBtn?.addEventListener('click', () => switchView('notifications'));
+  views.homeNotificationsBtn?.addEventListener('click', () => switchView('notifications'));
 
   views.sidebarToggle?.addEventListener('click', () => {
     views.appShell.classList.toggle('sidebar-collapsed');
@@ -1564,6 +1574,11 @@ function bindPostActions(container) {
       const video = button.closest('[data-video-shell]')?.querySelector('video');
       if (!video) return;
       if (video.paused) {
+        const post = getPostFromButton(button);
+        if (post?.mediaType === 'video') {
+          state.reelSeenPostIds.add(post.id);
+          saveReelSessionState();
+        }
         video.play().catch(() => {});
         button.textContent = 'Ⅱ';
       } else {
@@ -1660,6 +1675,19 @@ function bindPostActions(container) {
     });
   });
 
+  $$('[data-toggle-reel-comments]', container).forEach((button) => {
+    button.addEventListener('click', () => toggleReelComments(button));
+  });
+
+  $$('[data-close-reel-comments]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const post = getPostFromButton(button);
+      const panel = button.closest('[data-comments-panel]');
+      if (post) state.openComments.delete(post.id);
+      panel?.classList.remove('open');
+    });
+  });
+
   $$('[data-comment-emoji]', container).forEach((button) => {
     button.addEventListener('click', () => {
       const form = button.closest('[data-comment-form]');
@@ -1706,6 +1734,27 @@ function bindPostActions(container) {
       }
     });
   });
+}
+
+function toggleReelComments(button) {
+  const post = getPostFromButton(button);
+  if (!post) return;
+
+  const card = button.closest('[data-post-id]');
+  const panel = $('[data-comments-panel]', card);
+  if (!panel) return;
+
+  const shouldOpen = !panel.classList.contains('open');
+  panel.classList.toggle('open', shouldOpen);
+
+  if (shouldOpen) {
+    state.openComments.add(post.id);
+    attachCommentListener(post.id);
+    renderCommentsForPost(post.id);
+    setTimeout(() => $('[name="comment"]', panel)?.focus(), 80);
+  } else {
+    state.openComments.delete(post.id);
+  }
 }
 
 function attachCommentListener(postId) {
@@ -2060,9 +2109,17 @@ async function resolveMentionedUsers(text = '') {
 
 function renderNotificationBadge() {
   const unreadCount = state.notifications.filter((item) => !item.read).length;
-  if (!views.notificationBadge) return;
-  views.notificationBadge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
-  views.notificationBadge.classList.toggle('hidden', unreadCount === 0);
+  const label = unreadCount > 9 ? '9+' : String(unreadCount);
+
+  [views.notificationBadge, views.topbarNotificationBadge, views.homeNotificationBadge].forEach((badge) => {
+    if (!badge) return;
+    badge.textContent = label;
+    badge.classList.toggle('hidden', unreadCount === 0);
+  });
+
+  [views.topbarNotificationsBtn, views.homeNotificationsBtn].forEach((button) => {
+    button?.classList.toggle('has-unread', unreadCount > 0);
+  });
 }
 
 async function handleMarkNotificationsRead(options = {}) {
@@ -2236,33 +2293,221 @@ function getExploreMediaPosts(term = '') {
     .slice(0, 60);
 }
 
-function renderVideoFeed() {
-  if (!views.videoFeedList || !state.profile) return;
+function getReelSeenKey() {
+  return state.profile?.uid ? `pixora-reels-seen:${state.profile.uid}` : '';
+}
+
+function getReelOrderKey() {
+  return state.profile?.uid ? `pixora-reels-order:${state.profile.uid}` : '';
+}
+
+function safeParseJson(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function ensureReelSessionState() {
+  const uid = state.profile?.uid || '';
+  if (state.reelOrderLoadedFor === uid) return;
+
+  state.reelOrderLoadedFor = uid;
+  state.reelOrder = [];
+  state.reelOrderSignature = '';
+  state.reelSeenPostIds = new Set();
+
+  if (!uid) return;
+
+  const savedOrder = safeParseJson(localStorage.getItem(getReelOrderKey()), null);
+  if (savedOrder && Array.isArray(savedOrder.order)) {
+    state.reelOrder = savedOrder.order.filter(Boolean);
+    state.reelOrderSignature = savedOrder.signature || '';
+  }
+
+  const savedSeen = safeParseJson(localStorage.getItem(getReelSeenKey()), []);
+  if (Array.isArray(savedSeen)) state.reelSeenPostIds = new Set(savedSeen.filter(Boolean).slice(-120));
+}
+
+function saveReelSessionState() {
+  if (!state.profile?.uid) return;
+
+  try {
+    localStorage.setItem(getReelOrderKey(), JSON.stringify({
+      signature: state.reelOrderSignature,
+      order: state.reelOrder.slice(0, 80)
+    }));
+    localStorage.setItem(getReelSeenKey(), JSON.stringify([...state.reelSeenPostIds].slice(-120)));
+  } catch (error) {
+    console.warn('Could not save reels preference:', error);
+  }
+}
+
+function getStableHash(value = '') {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getReelAlgorithmScore(post = {}) {
+  const engagement = getPostEngagement(post);
+  const ageHours = getPostAgeHours(post);
+  const freshness = Math.max(0, 96 - ageHours) / 96;
+  const velocity = engagement / Math.pow(ageHours + 2, 0.72);
+  const followedBoost = state.following.has(post.authorId) ? 2.2 : 0;
+  const myLikeBoost = Array.isArray(post.likedBy) && post.likedBy.includes(state.profile?.uid) ? 1.4 : 0;
+  const seenPenalty = state.reelSeenPostIds.has(post.id) ? 7 : 0;
+  const ownPenalty = post.authorId === state.profile?.uid ? 1.2 : 0;
+  const stableDiscoveryNoise = (getStableHash(`${state.profile?.uid || 'guest'}:${post.id}`) % 1000) / 1000;
+
+  return Number((
+    velocity
+    + (freshness * 14)
+    + followedBoost
+    + myLikeBoost
+    + stableDiscoveryNoise
+    - seenPenalty
+    - ownPenalty
+  ).toFixed(4));
+}
+
+function buildDiversifiedReelOrder(posts = [], lockedIds = []) {
+  const lockedAuthors = lockedIds
+    .map((id) => posts.find((post) => post.id === id)?.authorId)
+    .filter(Boolean);
+  const authorCounts = new Map();
+  lockedAuthors.slice(-8).forEach((authorId) => authorCounts.set(authorId, (authorCounts.get(authorId) || 0) + 1));
+
+  const pool = posts
+    .filter((post) => post.id && !lockedIds.includes(post.id))
+    .map((post) => ({ post, score: getReelAlgorithmScore(post) }))
+    .sort((a, b) => b.score - a.score || getPostAgeHours(a.post) - getPostAgeHours(b.post));
+
+  const order = [];
+  let lastAuthorId = lockedAuthors.at(-1) || '';
+  const maxCreatorShare = Math.max(2, Math.ceil(Math.max(posts.length, 1) * 0.18));
+
+  while (pool.length && order.length < 80) {
+    let pickIndex = pool.findIndex((item) => {
+      const authorCount = authorCounts.get(item.post.authorId) || 0;
+      return item.post.authorId !== lastAuthorId && authorCount < maxCreatorShare;
+    });
+
+    if (pickIndex < 0) {
+      pickIndex = pool.findIndex((item) => item.post.authorId !== lastAuthorId);
+    }
+
+    if (pickIndex < 0) pickIndex = 0;
+
+    const [{ post }] = pool.splice(pickIndex, 1);
+    order.push(post.id);
+    lastAuthorId = post.authorId;
+    authorCounts.set(post.authorId, (authorCounts.get(post.authorId) || 0) + 1);
+  }
+
+  return order;
+}
+
+function getVideoPoolSignature(videos = []) {
+  return videos
+    .map((post) => `${post.id}:${post.authorId || ''}`)
+    .sort()
+    .join('|');
+}
+
+function getAlgorithmicVideoPosts() {
+  ensureReelSessionState();
 
   const videos = state.posts
     .filter((post) => post.mediaType === 'video' && post.mediaUrl && post.postKind !== 'story')
-    .filter((post) => post.authorId && !state.blocked.has(post.authorId))
-    .sort((a, b) => getViralScore(b) - getViralScore(a) || getPostAgeHours(a) - getPostAgeHours(b))
-    .slice(0, 40);
+    .filter((post) => post.authorId && !state.blocked.has(post.authorId));
+
+  const byId = new Map(videos.map((post) => [post.id, post]));
+  const signature = getVideoPoolSignature(videos);
+  const currentIds = new Set(videos.map((post) => post.id));
+
+  if (!state.reelOrder.length || state.reelOrderSignature !== signature) {
+    const keptOrder = state.reelOrder.filter((id) => currentIds.has(id));
+
+    if (keptOrder.length && state.reelOrderSignature) {
+      const newOrder = buildDiversifiedReelOrder(videos, keptOrder);
+      state.reelOrder = [...keptOrder, ...newOrder].slice(0, 80);
+    } else {
+      state.reelOrder = buildDiversifiedReelOrder(videos);
+    }
+
+    state.reelOrderSignature = signature;
+    saveReelSessionState();
+  }
+
+  return state.reelOrder
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .slice(0, 60);
+}
+
+function renderVideoFeed() {
+  if (!views.videoFeedList || !state.profile) return;
+
+  const videos = getAlgorithmicVideoPosts();
 
   if (!videos.length) {
-    views.videoFeedList.innerHTML = emptyState('No videos yet', 'Video posts from Pixora users will appear here. Create a video post to start this feed.');
+    views.videoFeedList.dataset.reelOrder = '';
+    views.videoFeedList.innerHTML = emptyState('No reels yet', 'Create or upload a video post to start the reels feed.');
     return;
   }
 
+  const orderKey = videos.map((post) => post.id).join('|');
+  if (views.videoFeedList.dataset.reelOrder === orderKey && views.videoFeedList.children.length) {
+    refreshRenderedReelCards(videos);
+    return;
+  }
+
+  views.videoFeedList.dataset.reelOrder = orderKey;
   views.videoFeedList.innerHTML = videos.map((post) => videoReelTemplate(post)).join('');
   bindPostActions(views.videoFeedList);
 
-  $$('[data-video-open-post]', views.videoFeedList).forEach((button) => {
-    button.addEventListener('click', () => {
-      const post = getPostFromButton(button);
-      if (!post) return;
-      state.openComments.add(post.id);
-      openUserProfile(post.authorId);
-      setTimeout(() => {
-        document.querySelector(`[data-post-id="${cssEscape(post.id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 160);
-    });
+  state.openComments.forEach((postId) => {
+    if (views.videoFeedList.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) {
+      attachCommentListener(postId);
+      renderCommentsForPost(postId);
+    }
+  });
+}
+
+function refreshRenderedReelCards(videos = []) {
+  videos.forEach((post) => {
+    const card = views.videoFeedList.querySelector(`[data-post-id="${cssEscape(post.id)}"]`);
+    if (!card) return;
+
+    const liked = Array.isArray(post.likedBy) && post.likedBy.includes(state.profile?.uid);
+    const saved = Array.isArray(post.savedBy) && post.savedBy.includes(state.profile?.uid);
+    const likeButton = $('[data-like-post]', card);
+    const commentButton = $('[data-toggle-reel-comments]', card);
+    const saveButton = $('[data-save-post]', card);
+    const shareButton = $('[data-share-post]', card);
+
+    if (likeButton) {
+      likeButton.classList.toggle('active', liked);
+      likeButton.innerHTML = `${uiIcon(liked ? 'heartFilled' : 'heart')}<span>${formatCount(post.likeCount)}</span>`;
+    }
+
+    if (commentButton) {
+      commentButton.innerHTML = `${uiIcon('comment')}<span>${formatCount(post.commentCount)}</span>`;
+    }
+
+    if (saveButton) {
+      saveButton.classList.toggle('active', saved);
+      saveButton.innerHTML = `${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')}<span>${saved ? 'Saved' : 'Save'}</span>`;
+    }
+
+    if (shareButton) {
+      shareButton.innerHTML = `${uiIcon('share')}<span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span>`;
+    }
   });
 }
 
@@ -2272,6 +2517,7 @@ function videoReelTemplate(post) {
   const liked = post.likedBy.includes(uid);
   const saved = post.savedBy.includes(uid);
   const canDelete = uid === post.authorId;
+  const commentsOpen = state.openComments.has(post.id);
 
   return `
     <article class="video-reel-card post-card" data-post-id="${escapeHTML(post.id)}">
@@ -2292,11 +2538,27 @@ function videoReelTemplate(post) {
       </div>
       <aside class="video-reel-actions">
         <button class="reel-action ${liked ? 'active' : ''}" type="button" data-like-post title="Like">${uiIcon(liked ? 'heartFilled' : 'heart')}<span>${formatCount(post.likeCount)}</span></button>
-        <button class="reel-action" type="button" data-video-open-post title="Comments">${uiIcon('comment')}<span>${formatCount(post.commentCount)}</span></button>
+        <button class="reel-action" type="button" data-toggle-reel-comments title="Comments">${uiIcon('comment')}<span>${formatCount(post.commentCount)}</span></button>
         <button class="reel-action ${saved ? 'active' : ''}" type="button" data-save-post title="Save">${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')}<span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reel-action" type="button" data-share-post title="Share">${uiIcon('share')}<span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
         ${canDelete ? `<div class="post-more-wrap reel-more"><button class="reel-action" type="button" data-post-menu-toggle title="More">${uiIcon('more')}</button><div class="post-more-menu"><button class="danger" type="button" data-delete-post>Delete post</button></div></div>` : ''}
       </aside>
+      <section class="comments-panel video-reel-comments ${commentsOpen ? 'open' : ''}" data-comments-panel>
+        <div class="reel-comments-header">
+          <strong>Comments</strong>
+          <button type="button" data-close-reel-comments aria-label="Close comments">×</button>
+        </div>
+        <div class="comments-list" data-comments-list="${escapeHTML(post.id)}"></div>
+        <form class="comment-form reel-comment-form" data-comment-form>
+          <div class="comment-emoji-row">
+            ${['😊', '🔥', '❤️', '👏'].map((emoji) => `<button type="button" data-comment-emoji="${emoji}">${emoji}</button>`).join('')}
+          </div>
+          <div class="comment-input-row">
+            <input name="comment" type="text" maxlength="300" autocomplete="off" placeholder="Add a comment..." required />
+            <button type="submit">Post</button>
+          </div>
+        </form>
+      </section>
     </article>
   `;
 }

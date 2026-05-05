@@ -5418,3 +5418,331 @@ body:not([data-theme="default-dark"]) .video-reel-media {
     display: none;
   }
 }
+
+/* User requested polish: theme-aware nav, full mobile nav, clean reels, home notification */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-notification-btn,
+.home-notification-btn {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border) !important;
+  border-radius: 999px;
+  color: var(--text) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.topbar-notification-btn svg,
+.home-notification-btn svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.topbar-notification-btn.has-unread,
+.home-notification-btn.has-unread {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--accent), var(--accent-3)) !important;
+  border-color: rgba(255,255,255,.22) !important;
+}
+
+.topbar-notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid var(--surface-solid);
+  background: #ff3040;
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.home-notification-btn {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 70;
+}
+
+#feed-view:not(.active) .home-notification-btn {
+  display: none !important;
+}
+
+.clean-reels-heading {
+  text-align: center;
+}
+
+.clean-reels-heading h2 {
+  letter-spacing: -0.06em;
+}
+
+.clean-reels-heading p {
+  display: none !important;
+}
+
+/* Theme-aware sidebar/nav. These rules override the earlier fixed dark rail. */
+body[data-theme="default-dark"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(8,13,18,.98), rgba(10,18,32,.96));
+  --nav-shell-border: rgba(255,255,255,.10);
+  --nav-icon-color: rgba(255,255,255,.92);
+  --nav-active-bg: rgba(255,255,255,.13);
+  --nav-hover-bg: rgba(255,255,255,.09);
+  --nav-indicator: #ffffff;
+  --nav-avatar-border: #080d12;
+}
+
+body[data-theme="day"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(255,255,255,.94), rgba(229,238,255,.93));
+  --nav-shell-border: rgba(79,70,229,.18);
+  --nav-icon-color: #172033;
+  --nav-active-bg: rgba(79,70,229,.14);
+  --nav-hover-bg: rgba(79,70,229,.09);
+  --nav-indicator: #4f46e5;
+  --nav-avatar-border: #ffffff;
+}
+
+body[data-theme="summer"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(255,246,216,.95), rgba(255,206,149,.93));
+  --nav-shell-border: rgba(249,115,22,.24);
+  --nav-icon-color: #2a1c10;
+  --nav-active-bg: rgba(249,115,22,.18);
+  --nav-hover-bg: rgba(249,115,22,.12);
+  --nav-indicator: #f97316;
+  --nav-avatar-border: #fff7df;
+}
+
+body[data-theme="spring"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(236,255,244,.96), rgba(170,238,203,.94));
+  --nav-shell-border: rgba(16,185,129,.24);
+  --nav-icon-color: #102018;
+  --nav-active-bg: rgba(16,185,129,.18);
+  --nav-hover-bg: rgba(16,185,129,.12);
+  --nav-indicator: #10b981;
+  --nav-avatar-border: #f1fff5;
+}
+
+body[data-theme="rainy"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(234,246,255,.96), rgba(143,211,244,.94));
+  --nav-shell-border: rgba(37,99,235,.24);
+  --nav-icon-color: #0f172a;
+  --nav-active-bg: rgba(37,99,235,.18);
+  --nav-hover-bg: rgba(37,99,235,.12);
+  --nav-indicator: #2563eb;
+  --nav-avatar-border: #edf6ff;
+}
+
+body[data-theme="winter"] .sidebar {
+  --nav-shell-bg: linear-gradient(180deg, rgba(246,249,255,.96), rgba(203,216,248,.94));
+  --nav-shell-border: rgba(100,116,139,.24);
+  --nav-icon-color: #111827;
+  --nav-active-bg: rgba(14,165,233,.16);
+  --nav-hover-bg: rgba(14,165,233,.10);
+  --nav-indicator: #0ea5e9;
+  --nav-avatar-border: #f5f8fb;
+}
+
+.sidebar,
+body:not([data-theme="default-dark"]) .sidebar {
+  background: var(--nav-shell-bg) !important;
+  border-color: var(--nav-shell-border) !important;
+  color: var(--nav-icon-color) !important;
+}
+
+.nav-link,
+.sidebar-collapsed .nav-link,
+body:not([data-theme="default-dark"]) .nav-link {
+  color: var(--nav-icon-color) !important;
+}
+
+.nav-link:hover,
+body:not([data-theme="default-dark"]) .nav-link:hover {
+  background: var(--nav-hover-bg) !important;
+}
+
+.nav-link.active,
+body:not([data-theme="default-dark"]) .nav-link.active {
+  color: var(--nav-icon-color) !important;
+  background: var(--nav-active-bg) !important;
+}
+
+.nav-link.active::before {
+  background: var(--nav-indicator) !important;
+}
+
+.nav-icon svg .fill-bg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.nav-badge {
+  border-color: var(--nav-avatar-border) !important;
+}
+
+.profile-nav-avatar-slot .avatar,
+.nav-profile .avatar.tiny {
+  border-color: var(--nav-avatar-border) !important;
+}
+
+@media (max-width: 760px) {
+  .home-notification-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .main-nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+
+  .sidebar,
+  body:not([data-theme="default-dark"]) .sidebar {
+    width: min(520px, calc(100% - 16px)) !important;
+    height: 68px !important;
+    padding: 7px 8px !important;
+    background: var(--nav-shell-bg) !important;
+    border-color: var(--nav-shell-border) !important;
+  }
+
+  .sidebar .nav-messages {
+    display: grid !important;
+  }
+
+  .sidebar .nav-notifications,
+  .sidebar .nav-settings {
+    display: none !important;
+  }
+
+  .nav-feed { order: 1; }
+  .nav-explore { order: 2; }
+  .nav-video { order: 3; }
+  .nav-create { order: 4; }
+  .nav-messages { order: 5; }
+  .nav-profile { order: 6; margin-top: 0 !important; }
+
+  .nav-link,
+  .sidebar-collapsed .nav-link,
+  body:not([data-theme="default-dark"]) .nav-link {
+    width: 100% !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    border-radius: 999px !important;
+    padding: 0 !important;
+  }
+
+  .nav-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .profile-nav-avatar-slot,
+  .profile-nav-avatar-slot .avatar,
+  .nav-profile .avatar.tiny {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+  }
+
+  .video-feed-heading {
+    margin-top: 4px;
+    margin-bottom: 10px;
+  }
+
+  .video-feed-heading .muted-label {
+    display: none;
+  }
+}
+
+/* Reels UX fix: keep comments inside reels and prevent actions from jumping the feed */
+.video-reel-comments {
+  position: absolute;
+  right: 96px;
+  bottom: 34px;
+  z-index: 12;
+  width: min(420px, calc(100% - 132px));
+  max-height: min(560px, calc(100dvh - 160px));
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 24px;
+  padding: 14px;
+  background: rgba(10, 14, 25, .82);
+  box-shadow: 0 24px 80px rgba(0,0,0,.35);
+  backdrop-filter: blur(24px);
+}
+
+body:not([data-theme="default-dark"]) .video-reel-comments {
+  border-color: rgba(15,23,42,.12);
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 24px 70px rgba(15,23,42,.14);
+}
+
+.reel-comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.reel-comments-header button {
+  width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--bg-soft);
+  font-size: 1.2rem;
+}
+
+.video-reel-comments .comments-list {
+  max-height: min(330px, calc(100dvh - 330px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.video-reel-comments .comment-form {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .video-reel-comments {
+    left: 10px;
+    right: 10px;
+    bottom: 12px;
+    width: auto;
+    max-height: min(62dvh, 560px);
+    border-radius: 22px 22px 18px 18px;
+  }
+
+  .video-reel-comments .comments-list {
+    max-height: calc(62dvh - 150px);
+  }
+
+  .video-reel-comments.open ~ .video-reel-actions,
+  .video-reel-card:has(.video-reel-comments.open) .video-reel-actions {
+    transform: translateX(70px);
+    opacity: .35;
+    pointer-events: none;
+  }
+}

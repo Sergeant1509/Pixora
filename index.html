@@ -74,10 +74,20 @@
               <h2 id="topbar-title">Feed</h2>
             </div>
           </div>
-          <button id="current-user-chip" class="user-chip" type="button" data-view-target="profile" aria-label="Open your profile"></button>
+          <div class="topbar-actions">
+            <button id="topbar-notifications-btn" class="topbar-notification-btn" type="button" aria-label="Open notifications" title="Notifications">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+              <span id="topbar-notification-badge" class="topbar-notification-badge hidden">0</span>
+            </button>
+            <button id="current-user-chip" class="user-chip" type="button" data-view-target="profile" aria-label="Open your profile"></button>
+          </div>
         </header>
 
         <section id="feed-view" class="view active" data-view="feed">
+          <button id="home-notifications-btn" class="home-notification-btn" type="button" aria-label="Open notifications" title="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+            <span id="home-notification-badge" class="topbar-notification-badge hidden">0</span>
+          </button>
           <div class="ig-home-layout">
             <main class="ig-feed-column">
               <section class="stories-strip" aria-label="Stories and quick actions">
@@ -137,10 +147,9 @@
 
         <section id="video-view" class="view" data-view="video">
           <div class="video-feed-shell">
-            <div class="video-feed-heading">
-              <span class="muted-label">Video feed</span>
-              <h2>Reels from Pixora</h2>
-              <p>Only video posts appear here, sorted by recent activity and engagement.</p>
+            <div class="video-feed-heading clean-reels-heading">
+              <span class="muted-label">Reels</span>
+              <h2>Reels</h2>
             </div>
             <div id="video-feed-list" class="video-feed-list"></div>
           </div>
