@@ -328,3 +328,21 @@
   transform: translateY(-1px);
   border-color: rgba(139, 92, 246, 0.6);
 }
+
+/* signup field alignment */
+.auth-form .field-grid label {
+  min-width: 0;
+}
+
+.auth-form .field-grid input,
+.auth-form .field-grid .username-status,
+.auth-form .field-grid .username-suggestions {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .auth-form .field-grid {
+    grid-template-columns: 1fr;
+  }
+}

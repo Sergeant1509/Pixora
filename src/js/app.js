@@ -14,9 +14,10 @@ import {
   toggleSave
 } from './services/post.service.js';
 import { followUser, getFollowStats, listenToFollowers, listenToFollowing, listenToFollowList, listenToFollowStats, removeFollower, unfollowUser } from './services/social.service.js';
-import { listenToConversations, listenToMessages, openConversation, sendMessage } from './services/chat.service.js';
+import { clearConversationForEveryone, deleteMessageForEveryone, listenToConversations, listenToMessages, openConversation, sendMessage } from './services/chat.service.js';
 import { listenToNotifications, markNotificationsRead, notifyCommentLike, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
-import { cropImageFileToDataUrl, uploadAvatar, uploadCoverImage, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
+import { createCallInvite } from './services/call.service.js';
+import { cloudinaryReady, cropImageFileToDataUrl, uploadAvatar, uploadCoverImage, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
 import { REPORT_GROUPS, banMessage, blockUser, getBanInfo, listenToBlocked, registerContentViolation, scanContent, submitReport } from './services/moderation.service.js';
 import { $, $$, avatarTemplate, emptyState, escapeHTML, setButtonLoading } from './utils/dom.js';
 import { timeAgo } from './utils/time.js';
@@ -250,7 +251,9 @@ const state = {
   unsubscribeMessages: null,
   unsubscribeProfileStats: null,
   unsubscribeFollowList: null,
-  linkScrolled: false
+  linkScrolled: false,
+  currentTheme: localStorage.getItem('pixora-theme') || 'day',
+  activityTimer: null
 };
 
 const views = {
@@ -309,6 +312,7 @@ const views = {
 boot();
 
 function boot() {
+  applyTheme(state.currentTheme);
   bindStaticEvents();
 
   listenToAuth((user) => {
@@ -343,6 +347,8 @@ function bindStaticEvents() {
   $('#post-form')?.addEventListener('submit', handleCreatePost);
   views.messageForm?.addEventListener('submit', handleSendMessage);
   $('#profile-form')?.addEventListener('submit', handleProfileSave);
+  $('#theme-options')?.addEventListener('change', handleThemeChange);
+  $('#hide-activity-toggle')?.addEventListener('change', handleActivityToggle);
 
   $('[name="content"]', $('#post-form'))?.addEventListener('input', (event) => {
     $('#post-count').textContent = `${event.target.value.length} / 800`;
@@ -380,7 +386,7 @@ function bindStaticEvents() {
 function switchView(target) {
   const labels = {
     feed: ['Welcome back', 'Feed'],
-    discover: ['People', 'Discover'],
+    discover: ['Explore', 'Discover'],
     messages: ['Inbox', 'Messages'],
     notifications: ['Activity', 'Notifications'],
     profile: ['Profile', 'Profile'],
@@ -603,7 +609,12 @@ function attachRealtimeListeners(uid) {
       renderConversations();
     })
   );
+
+  updateActivityNow();
+  if (state.activityTimer) clearInterval(state.activityTimer);
+  state.activityTimer = setInterval(updateActivityNow, 60000);
 }
+
 
 function cleanupRealtimeListeners() {
   state.unsubscribers.forEach((unsubscribe) => unsubscribe?.());
@@ -641,10 +652,59 @@ function cleanupRealtimeListeners() {
   state.activeConversationId = null;
   state.activeChatUser = null;
   state.followModal = { uid: '', type: 'followers', user: null, items: [] };
+  if (state.activityTimer) clearInterval(state.activityTimer);
+  state.activityTimer = null;
 }
 
 function showApp() {
   views.appShell.classList.remove('hidden');
+}
+
+function applyTheme(theme = 'default-dark') {
+  const allowed = ['default-dark', 'day', 'summer', 'spring', 'rainy', 'winter'];
+  const nextTheme = allowed.includes(theme) ? theme : 'default-dark';
+  state.currentTheme = nextTheme;
+  localStorage.setItem('pixora-theme', nextTheme);
+  document.body.dataset.theme = nextTheme;
+}
+
+async function handleThemeChange(event) {
+  const theme = event.target?.value;
+  if (!theme || !state.profile) return;
+  applyTheme(theme);
+  try {
+    await updateUserMeta(state.profile.uid, { theme });
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function handleActivityToggle(event) {
+  if (!state.profile) return;
+  const hideActivity = Boolean(event.target.checked);
+  state.profile = { ...state.profile, hideActivity };
+  renderProfilePanel();
+  try {
+    await updateUserMeta(state.profile.uid, { hideActivity });
+    showToast(hideActivity ? 'Last activity hidden.' : 'Last activity visible.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function updateActivityNow() {
+  if (!state.profile?.uid || state.profile.hideActivity) return;
+  try {
+    await updateUserMeta(state.profile.uid, { lastActiveAt: new Date().toISOString() });
+  } catch (error) {
+    console.warn('Activity update failed:', error);
+  }
+}
+
+function activityText(user = {}) {
+  if (user.hideActivity) return 'Last activity hidden';
+  if (!user.lastActiveAt) return 'Activity not available';
+  return `Active ${timeAgo(user.lastActiveAt)}`;
 }
 
 function renderCurrentUser() {
@@ -673,6 +733,11 @@ function renderSettingsPanel() {
   if (!form.coverUrl.value) form.coverUrl.value = state.profile.coverUrl || '';
   renderAvatarInto(views.settingsAvatarPreview, { ...state.profile, avatarUrl: form.avatarUrl.value || state.profile.avatarUrl }, 'xl');
   renderCoverPreview(form.coverUrl.value || state.profile.coverUrl || '');
+
+  const hideToggle = $('#hide-activity-toggle');
+  if (hideToggle) hideToggle.checked = Boolean(state.profile.hideActivity);
+  const currentTheme = state.profile.theme || state.currentTheme || 'day';
+  $$('[name="themeMode"]').forEach((input) => { input.checked = input.value === currentTheme; });
 
   const savedPosts = state.posts.filter((post) => post.savedBy.includes(state.profile.uid) && !state.blocked.has(post.authorId));
   renderPostsInto(views.savedPostsList, savedPosts, {
@@ -760,6 +825,7 @@ function renderProfilePanel() {
         <h2>${escapeHTML(user.displayName || 'User')}</h2>
         <p>@${escapeHTML(user.username || 'user')}</p>
         <p class="profile-bio-preview">${escapeHTML(user.bio || 'No bio yet.')}</p>
+        <p class="activity-line">${activityText(user)}</p>
       </div>
       <div class="profile-actions">
         ${isMe ? `
@@ -1172,6 +1238,9 @@ function postTemplate(post) {
 
 function mediaTemplate(post) {
   if (!post.mediaUrl) return '';
+  if (post.mediaType === 'video') {
+    return `<video class="post-media" src="${escapeHTML(post.mediaUrl)}" controls playsinline preload="metadata"></video>`;
+  }
   return `<img class="post-media" src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`;
 }
 
@@ -1266,10 +1335,9 @@ function bindPostActions(container) {
           return;
         }
 
-        const createdComment = await addComment(post.id, state.profile, text);
+        await addComment(post.id, state.profile, text);
         state.openComments.add(post.id);
-        state.commentsByPost.set(post.id, [...(state.commentsByPost.get(post.id) || []), createdComment]);
-        renderCommentsForPost(post.id);
+        attachCommentListener(post.id);
         form.reset();
 
         notifyPostComment(post, state.profile, text).catch((error) => console.warn('Comment notification failed:', error));
@@ -1697,6 +1765,9 @@ function notificationTemplate(notification) {
   } else if (notification.type === 'comment_like') {
     title = `${latestActor.displayName || notification.latestActorName} liked your comment`;
     body = notification.commentText || notification.postPreview || 'Open the post';
+  } else if (notification.type === 'call_invite') {
+    title = `${latestActor.displayName || notification.latestActorName} started a call`;
+    body = notification.postPreview || 'Open messages to respond.';
   } else if (notification.type === 'account_ban') {
     title = 'Your account has a temporary safety limit';
     body = notification.commentText || notification.postPreview || 'Open account settings for details.';
@@ -1791,49 +1862,48 @@ function renderLikesModal() {
 }
 
 function renderPeople() {
-  if (!state.profile) return;
+  if (!state.profile || !views.peopleList) return;
 
   const term = views.peopleSearch?.value?.trim().toLowerCase() || '';
-  const users = state.users.filter((user) => !state.blocked.has(user.uid)).filter((user) => {
-    const haystack = `${user.displayName || ''} ${user.username || ''}`.toLowerCase();
-    return haystack.includes(term);
-  });
+  const recommended = state.posts
+    .filter((post) => post.authorId && post.authorId !== state.profile.uid && !state.blocked.has(post.authorId))
+    .filter((post) => {
+      const haystack = `${post.content || ''} ${post.authorName || ''} ${post.authorUsername || ''}`.toLowerCase();
+      return !term || haystack.includes(term);
+    })
+    .sort((a, b) => getViralScore(b) - getViralScore(a) || getPostAgeHours(a) - getPostAgeHours(b))
+    .slice(0, 36);
 
-  if (!users.length) {
-    views.peopleList.innerHTML = emptyState('No people found', 'When more users join, they will appear here.');
+  if (!recommended.length) {
+    views.peopleList.innerHTML = emptyState('No recommended posts yet', 'As more people post and interact, recommended posts will appear here.');
     return;
   }
 
-  views.peopleList.innerHTML = users.map((user) => {
-    const isFollowing = state.following.has(user.uid);
+  views.peopleList.innerHTML = recommended.map((post) => {
+    const media = post.mediaUrl
+      ? (post.mediaType === 'video'
+        ? `<video src="${escapeHTML(post.mediaUrl)}" muted playsinline preload="metadata"></video>`
+        : `<img src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`)
+      : `<div class="discover-text-tile">${escapeHTML((post.content || 'Pixora post').slice(0, 120))}</div>`;
+
     return `
-      <article class="person-card" data-user-id="${escapeHTML(user.uid)}">
-        <button class="person-card-header as-button" type="button" data-view-user>
-          ${avatarTemplate(user)}
-          <div class="person-meta">
-            <strong>${escapeHTML(user.displayName || 'User')}</strong>
-            <span>@${escapeHTML(user.username || 'user')}</span>
-          </div>
-        </button>
-        <p class="person-bio">${escapeHTML(user.bio || 'No bio yet.')}</p>
-        <div class="person-actions">
-          <button class="${isFollowing ? 'ghost-btn' : 'primary-btn'}" type="button" data-follow-action>${isFollowing ? 'Unfollow' : 'Follow'}</button>
-          <button class="ghost-btn" type="button" data-message-action>Message</button>
-        </div>
-      </article>
+      <button class="discover-post-tile" type="button" data-discover-post="${escapeHTML(post.id)}">
+        ${media}
+        <span class="discover-post-overlay">
+          <strong>@${escapeHTML(post.authorUsername || 'user')}</strong>
+          <small>♡ ${formatCount(post.likeCount)} · 💬 ${formatCount(post.commentCount)}</small>
+        </span>
+      </button>
     `;
   }).join('');
 
-  $$('[data-view-user]', views.peopleList).forEach((button) => {
-    button.addEventListener('click', () => openUserProfile(button.closest('[data-user-id]').dataset.userId));
-  });
-
-  $$('[data-follow-action]', views.peopleList).forEach((button) => {
-    button.addEventListener('click', () => toggleFollow(findUser(button.closest('[data-user-id]').dataset.userId)));
-  });
-
-  $$('[data-message-action]', views.peopleList).forEach((button) => {
-    button.addEventListener('click', () => startChat(findUser(button.closest('[data-user-id]').dataset.userId)));
+  $$('[data-discover-post]', views.peopleList).forEach((button) => {
+    button.addEventListener('click', () => {
+      const postId = button.dataset.discoverPost;
+      state.openComments.add(postId);
+      switchView('feed');
+      setTimeout(() => document.querySelector(`[data-post-id="${cssEscape(postId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    });
   });
 }
 
@@ -1939,11 +2009,19 @@ async function activateConversation(conversationId, otherUser) {
       ${avatarTemplate(otherUser)}
       <div class="person-meta">
         <strong>${escapeHTML(otherUser.displayName || 'User')}</strong>
-        <span>@${escapeHTML(otherUser.username || 'user')}</span>
+        <span>@${escapeHTML(otherUser.username || 'user')} · ${activityText(otherUser)}</span>
       </div>
     </button>
+    <div class="chat-header-actions">
+      <button class="ghost-btn compact-action" type="button" data-audio-call>Audio</button>
+      <button class="primary-btn compact-action" type="button" data-video-call>Video</button>
+      <button class="ghost-btn danger compact-action" type="button" data-clear-chat>Delete chat</button>
+    </div>
   `;
   $('[data-chat-profile]', views.chatHeader)?.addEventListener('click', () => openUserProfile(otherUser.uid));
+  $('[data-audio-call]', views.chatHeader)?.addEventListener('click', () => startCall('audio'));
+  $('[data-video-call]', views.chatHeader)?.addEventListener('click', () => startCall('video'));
+  $('[data-clear-chat]', views.chatHeader)?.addEventListener('click', handleClearChat);
 
   renderConversations();
   hideChatTools();
@@ -1991,6 +2069,18 @@ function renderMessages(messages) {
     button.addEventListener('click', () => openUserProfile(button.dataset.messageMention));
   });
 
+  $$('[data-unsend-message]', views.messagesList).forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Delete this message for everyone?')) return;
+      try {
+        await deleteMessageForEveryone(state.activeConversationId, button.dataset.unsendMessage, state.profile);
+        showToast('Message deleted.');
+      } catch (error) {
+        showToast(friendlyError(error), 'error');
+      }
+    });
+  });
+
   $$('img', views.messagesList).forEach((image) => {
     if (!image.complete) {
       image.addEventListener('load', () => scrollMessagesToBottom(), { once: true });
@@ -2022,11 +2112,44 @@ function messageTemplate(message) {
   }
 
   return `
-    <div class="message-bubble ${mine ? 'mine' : ''}">
+    <div class="message-bubble ${mine ? 'mine' : ''}" data-message-id="${escapeHTML(message.id)}">
+      ${mine ? `<button class="message-unsend" type="button" data-unsend-message="${escapeHTML(message.id)}" title="Delete for everyone">×</button>` : ''}
       ${content.join('')}
       <small>${escapeHTML(timeAgo(message.createdAt))}</small>
     </div>
   `;
+}
+
+async function handleClearChat() {
+  if (!state.activeConversationId || !window.confirm('Delete this whole chat for everyone?')) return;
+  try {
+    await clearConversationForEveryone(state.activeConversationId);
+    state.activeConversationId = null;
+    state.activeChatUser = null;
+    views.chatActive.classList.add('hidden');
+    views.chatEmpty.classList.remove('hidden');
+    showToast('Chat deleted.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function startCall(mode = 'audio') {
+  if (!state.activeConversationId || !state.activeChatUser || !state.profile) return;
+  try {
+    const constraints = mode === 'video' ? { audio: true, video: true } : { audio: true, video: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    stream.getTracks().forEach((track) => track.stop());
+    await createCallInvite({
+      conversationId: state.activeConversationId,
+      caller: state.profile,
+      receiver: state.activeChatUser,
+      mode
+    });
+    showToast(`${mode === 'video' ? 'Video' : 'Audio'} call request sent. WebRTC signaling records were created in Firestore.`);
+  } catch (error) {
+    showToast(error?.name === 'NotAllowedError' ? 'Camera/microphone permission was denied.' : friendlyError(error), 'error');
+  }
 }
 
 function toggleChatTools(panel) {
@@ -2207,15 +2330,19 @@ function renderSelectedMediaPreview() {
     return;
   }
 
-  if (file.type?.startsWith('video/')) {
-    views.postMediaInput.value = '';
-    showToast('Video upload needs Firebase Storage, Cloudinary, or a backend. This Spark version supports images only.', 'error');
-    return;
-  }
-
   const url = URL.createObjectURL(file);
   views.mediaPreview.classList.remove('hidden');
-  views.mediaPreview.innerHTML = `<img src="${url}" alt="Selected media" /><button type="button" data-clear-media>×</button>`;
+  if (file.type?.startsWith('video/')) {
+    if (!cloudinaryReady()) {
+      views.postMediaInput.value = '';
+      clearMediaPreview();
+      showToast('Video upload needs Cloudinary. Add cloud name and unsigned preset in .env first.', 'error');
+      return;
+    }
+    views.mediaPreview.innerHTML = `<video src="${url}" controls playsinline muted></video><button type="button" data-clear-media>×</button>`;
+  } else {
+    views.mediaPreview.innerHTML = `<img src="${url}" alt="Selected media" /><button type="button" data-clear-media>×</button>`;
+  }
 
   $('[data-clear-media]', views.mediaPreview)?.addEventListener('click', () => {
     views.postMediaInput.value = '';

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101014" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Pixora — Social App</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -65,8 +65,8 @@
               <div id="media-preview" class="media-preview hidden"></div>
               <div class="composer-actions">
                 <label class="upload-chip">
-                  <input id="post-media" name="mediaFile" type="file" accept="image/*" />
-                  <span>＋ Photo</span>
+                  <input id="post-media" name="mediaFile" type="file" accept="image/*,video/*" />
+                  <span>＋ Media</span>
                 </label>
                 <span id="post-count" class="soft-note">0 / 800</span>
                 <button class="primary-btn" type="submit">Publish</button>
@@ -79,10 +79,10 @@
         <section id="discover-view" class="view" data-view="discover">
           <div class="section-heading">
             <div>
-              <span class="muted-label">People</span>
-              <h2>Discover creators</h2>
+              <span class="muted-label">Recommended</span>
+              <h2>Explore posts</h2>
             </div>
-            <input id="people-search" class="search-input" type="search" placeholder="Search by name or username" />
+            <input id="people-search" class="search-input" type="search" placeholder="Search posts, names, or usernames" />
           </div>
           <div id="people-list" class="people-grid"></div>
         </section>
@@ -195,6 +195,36 @@
             <section class="settings-card glass-card reveal-up">
               <div class="section-heading compact">
                 <div>
+                  <span class="muted-label">Appearance</span>
+                  <h2>Theme mode</h2>
+                </div>
+              </div>
+              <div id="theme-options" class="theme-options">
+                <label><input type="radio" name="themeMode" value="default-dark" /> Default dark</label>
+                <label><input type="radio" name="themeMode" value="day" /> Day mode</label>
+                <label><input type="radio" name="themeMode" value="summer" /> Summer</label>
+                <label><input type="radio" name="themeMode" value="spring" /> Spring</label>
+                <label><input type="radio" name="themeMode" value="rainy" /> Rainy</label>
+                <label><input type="radio" name="themeMode" value="winter" /> Winter</label>
+              </div>
+            </section>
+
+            <section class="settings-card glass-card reveal-up">
+              <div class="section-heading compact">
+                <div>
+                  <span class="muted-label">Privacy</span>
+                  <h2>Last activity</h2>
+                </div>
+              </div>
+              <label class="settings-toggle-row">
+                <span>Hide my last activity from other users</span>
+                <input id="hide-activity-toggle" type="checkbox" />
+              </label>
+            </section>
+
+            <section class="settings-card glass-card reveal-up">
+              <div class="section-heading compact">
+                <div>
                   <span class="muted-label">Library</span>
                   <h2>Saved posts</h2>
                 </div>
@@ -213,6 +243,7 @@
                 <button id="delete-account" class="ghost-btn danger" type="button">Delete account</button>
               </div>
             </section>
+            <footer class="demo-footnote">It is a demo version. This is not a complete version.</footer>
           </div>
         </section>
       </section>

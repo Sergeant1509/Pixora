@@ -24,6 +24,9 @@ export function normalizeUser(user = {}) {
     bio: user.bio || '',
     avatarUrl: user.avatarUrl || user.avatar || user.photoURL || '',
     coverUrl: user.coverUrl || user.cover || '',
+    hideActivity: Boolean(user.hideActivity),
+    lastActiveAt: user.lastActiveAt || null,
+    theme: user.theme || 'day',
     followersCount: Number(user.followersCount || user.followerCount || 0),
     followingCount: Number(user.followingCount || 0)
   };

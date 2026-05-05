@@ -1,119 +1,78 @@
-# Pixora Social — Firebase Spark Safe Advanced Version
+# Pixora
 
-A polished Firebase social media front-end using Firebase Auth, Google login, Cloud Firestore, real-time listeners, and Firebase Hosting. This version does **not** use Firebase Storage, so it stays friendly for Firebase Spark/free-plan projects.
+Pixora is a Firebase powered social media web app built with HTML, CSS, JavaScript and Vite. It includes real-time posts, chat, profiles, followers/following, notifications, reports, saved posts, comments, likes, themes and a simple responsive interface.
 
-## Features
+## Main features
 
-- Email/password sign in and sign up
-- Google sign in / sign up
-- Compact Instagram-style sidebar with the expand button fixed inside the sidebar
-- Global Firestore feed visible to all accounts
-- Local photo upload for posts, stored as compressed Firestore inline data
-- Likes, comments with emoji shortcuts, saves, and share counts
-- Share posts by copying a link or sending them to following/discover users in chat
-- Discover users and open other users' profiles
-- Profile pages for yourself and other users with posts, followers, and following counts
-- Settings page with profile editing, saved posts, logout, and account deletion
-- Profile photo crop, zoom, move, and rotate before saving from Settings or your profile page
-- Real-time messaging with only real conversations shown
-- Chat emoji panel, GIPHY GIF search, and local image sharing in messages
-- No premade posts, no fake users, and no fake chat history
+- Email/password and Google sign-in
+- Unique usernames with suggestions
+- Following based feed with own posts and trending posts
+- Recommended post grid in Discover
+- Post likes, comments, saves, shares and comment likes
+- Notifications for likes, comments, mentions and comment likes
+- Real-time messaging with image and GIF support
+- Demo encrypted text messages in Firestore
+- Delete message for everyone / delete chat option
+- Audio/video call request starter using browser media permissions and Firestore call records
+- Profile photo crop, cover photo and profile stats
+- Followers/following lists with follow, unfollow and remove follower options
+- Report, block and basic moderation flows
+- Last activity status with a setting to hide it
+- Theme modes: Default dark, Day, Summer, Spring, Rainy and Winter
+- Mobile friendly bottom navigation
 
-## Important: media uploads
+## Tech stack
 
-Firebase Cloud Storage requires billing for newer Firebase projects. This project avoids Storage completely.
+- HTML5
+- CSS3
+- JavaScript
+- Vite
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Hosting
+- GIPHY API
+- Cloudinary unsigned uploads
 
-Because Firestore documents have a 1 MiB max size, local uploads are limited to compressed images only. Videos cannot be stored persistently without Firebase Storage, Cloudinary, Supabase Storage, or your own backend.
+## Environment setup
 
-## Setup
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Create `.env` in the project root:
+Create a `.env` file in the project root:
 
 ```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_API_KEY=your_firebase_web_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=your-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id_optional
 VITE_GIPHY_API_KEY=your_giphy_api_key_optional
+VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_unsigned_upload_preset
 ```
 
-The app includes a GIPHY API key for GIF search for reliability.
+Do not put `.env` on GitHub.
 
-Run locally:
+## Cloudinary setup
+
+This project uses Cloudinary unsigned upload presets for browser uploads. Add only the cloud name and unsigned upload preset to `.env`.
+
+Do not add the Cloudinary API secret to frontend files. The API secret belongs on a backend server only.
+
+## Run locally
 
 ```bash
+npm install
 npm run dev
 ```
 
-Build and deploy:
+## Build and deploy
 
 ```bash
 npm run build
 firebase deploy
-```
-
-Deploy Firestore rules only:
-
-```bash
 firebase deploy --only firestore:rules
 ```
 
-## Firebase Console checklist
+## Notes
 
-Enable these providers:
-
-- Authentication → Sign-in method → Email/Password
-- Authentication → Sign-in method → Google
-
-Create:
-
-- Firestore Database
-- Firebase Hosting
-
-Do not enable Firebase Storage for this Spark/free-plan version.
-
-
-## Notes for this build
-
-- The GIF button appears inside an active chat. Open a user profile or Discover card, click Message, then use the `GIF` button beside the emoji/photo buttons.
-- Profile photo editing is available in Settings and also from your own Profile page using `Change photo`.
-- Post sharing opens a Pixora share modal. You can copy the post link or send the post into a chat.
-- On mobile, the sidebar becomes a bottom navigation bar for a cleaner responsive layout.
-
-
-## Safety, Reports, and Moderation
-
-Pixora includes client-side safety checks for posts and comments. Content that matches blocked adult/vulgar patterns is prevented from publishing and a record is written to the `moderationEvents` collection.
-
-User reports are stored in the `reports` collection with fields such as:
-
-- `reporterId`
-- `targetUserId`
-- `targetType`
-- `postId`
-- `commentId`
-- `reasonGroup`
-- `details`
-- `status`
-- `createdAt`
-
-To review reports in Firebase Console:
-
-1. Open Firebase Console.
-2. Go to Firestore Database.
-3. Open the `reports` collection.
-4. Filter or sort by `reasonGroup`, `targetUserId`, `status`, or `createdAt`.
-5. Change `status` manually if you want to mark a report as reviewed.
-
-Temporary limits are stored on the user document with fields like `bannedUntil`, `banReason`, `reportCount`, and `moderationViolationCount`.
-
-For production apps, moderation and bans should be moved to a trusted backend or Firebase Cloud Functions so users cannot bypass enforcement from the browser.
+This is a demo version. It is not a complete production social media platform. For a real public app, move sensitive operations such as moderation decisions, bans, media signing and stronger encryption to a backend or Firebase Cloud Functions.

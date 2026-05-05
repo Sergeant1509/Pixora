@@ -49,7 +49,9 @@ export async function registerUser(formData) {
       email,
       bio: '',
       avatarUrl: '',
-      coverUrl: ''
+      coverUrl: '',
+      hideActivity: false,
+      theme: 'day'
     });
 
     await upsertUserProfile(credential.user.uid, profile, 'password');
@@ -125,7 +127,9 @@ async function ensureUserProfile(firebaseUser, provider = '') {
     username: fallbackUsername,
     avatarUrl: firebaseUser.photoURL || '',
     coverUrl: '',
-    bio: ''
+    bio: '',
+    hideActivity: false,
+    theme: 'day'
   });
 
   await reserveUsername(fallback.username, firebaseUser.uid);
@@ -197,6 +201,9 @@ async function upsertUserProfile(uid, profile, provider) {
     ...profile,
     provider,
     postCount: 0,
+    hideActivity: Boolean(profile.hideActivity),
+    theme: profile.theme || 'day',
+    lastActiveAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, { merge: true });

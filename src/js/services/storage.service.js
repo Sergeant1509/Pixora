@@ -8,16 +8,35 @@ const AVATAR_IMAGE_SETTINGS = { maxWidth: 360, maxHeight: 360, quality: 0.72, ma
 const COVER_IMAGE_SETTINGS = { maxWidth: 1500, maxHeight: 620, quality: 0.7, maxBytes: MAX_COVER_IMAGE_BYTES };
 const MESSAGE_IMAGE_SETTINGS = { maxWidth: 980, maxHeight: 980, quality: 0.7, maxBytes: MAX_MESSAGE_IMAGE_BYTES };
 
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
+
+export function cloudinaryReady() {
+  return Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
+}
+
 export function isImageFile(file) {
   return Boolean(file && file.type && file.type.startsWith('image/'));
 }
 
+export function isVideoFile(file) {
+  return Boolean(file && file.type && file.type.startsWith('video/'));
+}
+
 export async function uploadPostMedia(file) {
   if (!file || file.size === 0) return null;
-  if (file.type?.startsWith('video/')) {
-    throw new Error('Video upload needs Firebase Storage, Cloudinary, or your own backend. This free Spark version supports compressed image uploads only.');
+
+  if (cloudinaryReady()) {
+    return uploadToCloudinary(file, {
+      folder: 'pixora/posts',
+      resourceType: isVideoFile(file) ? 'video' : 'image'
+    });
   }
-  if (!isImageFile(file)) throw new Error('Please choose an image file.');
+
+  if (isVideoFile(file)) {
+    throw new Error('Video uploads need Cloudinary. Add VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET, then rebuild.');
+  }
+  if (!isImageFile(file)) throw new Error('Please choose an image or video file.');
 
   const dataUrl = await compressImageToDataUrl(file, POST_IMAGE_SETTINGS);
   return { url: dataUrl, type: 'image', path: 'firestore-inline-image', name: file.name };
@@ -27,10 +46,15 @@ export async function uploadCoverImage(fileOrDataUrl) {
   if (!fileOrDataUrl) return null;
 
   if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:image/')) {
+    if (cloudinaryReady()) {
+      const file = dataUrlToFile(fileOrDataUrl, 'pixora-cover.jpg');
+      return uploadToCloudinary(file, { folder: 'pixora/covers', resourceType: 'image' });
+    }
     return { url: fileOrDataUrl, type: 'image', path: 'firestore-inline-cover', name: 'cover-image.jpg' };
   }
 
   if (!isImageFile(fileOrDataUrl)) throw new Error('Cover image must be an image file.');
+  if (cloudinaryReady()) return uploadToCloudinary(fileOrDataUrl, { folder: 'pixora/covers', resourceType: 'image' });
   const dataUrl = await compressImageToDataUrl(fileOrDataUrl, COVER_IMAGE_SETTINGS);
   return { url: dataUrl, type: 'image', path: 'firestore-inline-cover', name: fileOrDataUrl.name };
 }
@@ -39,6 +63,7 @@ export async function uploadMessageImage(file) {
   if (!file || file.size === 0) return null;
   if (!isImageFile(file)) throw new Error('Please choose an image file.');
 
+  if (cloudinaryReady()) return uploadToCloudinary(file, { folder: 'pixora/messages', resourceType: 'image' });
   const dataUrl = await compressImageToDataUrl(file, MESSAGE_IMAGE_SETTINGS);
   return { url: dataUrl, type: 'image', path: 'firestore-inline-message-image', name: file.name };
 }
@@ -47,12 +72,47 @@ export async function uploadAvatar(fileOrDataUrl) {
   if (!fileOrDataUrl) return null;
 
   if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:image/')) {
+    if (cloudinaryReady()) {
+      const file = dataUrlToFile(fileOrDataUrl, 'pixora-avatar.jpg');
+      return uploadToCloudinary(file, { folder: 'pixora/avatars', resourceType: 'image' });
+    }
     return { url: fileOrDataUrl, type: 'image', path: 'firestore-inline-avatar', name: 'cropped-avatar.jpg' };
   }
 
   if (!isImageFile(fileOrDataUrl)) throw new Error('Avatar must be an image file.');
+  if (cloudinaryReady()) return uploadToCloudinary(fileOrDataUrl, { folder: 'pixora/avatars', resourceType: 'image' });
   const dataUrl = await compressImageToDataUrl(fileOrDataUrl, AVATAR_IMAGE_SETTINGS);
   return { url: dataUrl, type: 'image', path: 'firestore-inline-avatar', name: fileOrDataUrl.name };
+}
+
+async function uploadToCloudinary(file, options = {}) {
+  if (!cloudinaryReady()) throw new Error('Cloudinary is not configured. Add cloud name and unsigned upload preset in .env.');
+  if (!isImageFile(file) && !isVideoFile(file)) throw new Error('Only image and video files are supported.');
+
+  const resourceType = options.resourceType || (isVideoFile(file) ? 'video' : 'image');
+  const url = `https://api.cloudinary.com/v1_1/${encodeURIComponent(CLOUDINARY_CLOUD_NAME)}/${resourceType}/upload`;
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  if (options.folder) formData.append('folder', options.folder);
+
+  const response = await fetch(url, { method: 'POST', body: formData });
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(body.error?.message || 'Cloudinary upload failed. Check your cloud name and unsigned upload preset.');
+  }
+
+  return {
+    url: body.secure_url,
+    type: resourceType === 'video' ? 'video' : 'image',
+    path: body.public_id,
+    name: file.name,
+    width: body.width || 0,
+    height: body.height || 0,
+    bytes: body.bytes || file.size || 0,
+    format: body.format || ''
+  };
 }
 
 export async function compressImageToDataUrl(file, settings = POST_IMAGE_SETTINGS) {
@@ -97,6 +157,15 @@ export async function cropImageFileToDataUrl(file, options = {}) {
   ctx.restore();
 
   return canvasToSizedDataUrl(canvas, 0.76, MAX_AVATAR_IMAGE_BYTES);
+}
+
+function dataUrlToFile(dataUrl, filename) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
 }
 
 function canvasToSizedDataUrl(canvas, startingQuality, maxBytes) {
