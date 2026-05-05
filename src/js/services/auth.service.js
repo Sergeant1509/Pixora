@@ -6,6 +6,8 @@ import {
   signInWithPopup,
   signOut,
   deleteUser,
+  updatePassword,
+  sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth';
 import {
@@ -74,6 +76,18 @@ export async function loginWithGoogle() {
 
 export async function logoutUser() {
   await signOut(auth);
+}
+
+export async function changeCurrentUserPassword(newPassword) {
+  const current = auth.currentUser;
+  if (!current) throw new Error('You must be signed in to change password.');
+  await updatePassword(current, String(newPassword || ''));
+}
+
+export async function sendResetPasswordEmail(email) {
+  const targetEmail = String(email || auth.currentUser?.email || '').trim();
+  if (!targetEmail) throw new Error('No email found for password reset.');
+  await sendPasswordResetEmail(auth, targetEmail);
 }
 
 export async function deleteCurrentUserAccount() {

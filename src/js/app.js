@@ -1,4 +1,4 @@
-import { deleteCurrentUserAccount, listenToAuth, logoutUser } from './services/auth.service.js';
+import { changeCurrentUserPassword, deleteCurrentUserAccount, listenToAuth, logoutUser, sendResetPasswordEmail } from './services/auth.service.js';
 import { getUserById, getUserByUsername, listenToUser, listenToUsers, updateUserMeta, updateUserProfile } from './services/user.service.js';
 import {
   addComment,
@@ -25,6 +25,23 @@ import { friendlyError, showToast } from './ui/toast.js';
 
 const emojiSet = ['😀', '😂', '😍', '🔥', '❤️', '👏', '✨', '😭', '😎', '🙏', '💯', '🎉', '😊', '🤝', '🌟', '💬'];
 const giphyKey = import.meta.env.VITE_GIPHY_API_KEY || '';
+
+const UI_ICON_SVGS = {
+  heart: '<svg viewBox="0 0 24 24"><path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 0 0-7.2 7.2l1 1L12 21l7.2-7 .95-.95a5.1 5.1 0 0 0 .05-7.25z"/></svg>',
+  heartFilled: '<svg viewBox="0 0 24 24" class="filled"><path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 0 0-7.2 7.2l1 1L12 21l7.2-7 .95-.95a5.1 5.1 0 0 0 .05-7.25z"/></svg>',
+  comment: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7A2.5 2.5 0 0 1 17.5 15H9l-5 4v-6.5z"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-3.8L6 21z"/></svg>',
+  bookmarkFilled: '<svg viewBox="0 0 24 24" class="filled"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-3.8L6 21z"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg>',
+  phone: '<svg viewBox="0 0 24 24"><path d="M8.5 5.5 6.8 3.8A2 2 0 0 0 4 3.8l-1 1C2 5.8 2.3 8.6 4.7 12.2c2.4 3.6 5.5 6.7 9.1 9.1 3.6 2.4 6.4 2.7 7.4 1.7l1-1a2 2 0 0 0 0-2.8l-1.7-1.7a2 2 0 0 0-2.3-.35l-2.2 1.1c-2.8-1.4-5-3.6-6.4-6.4l1.1-2.2a2 2 0 0 0-.35-2.3z"/></svg>',
+  video: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="3"/><path d="m15 10 6-3v10l-6-3z"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>',
+  settings: '<svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.8 1.8 0 0 0 .35 2l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05a1.8 1.8 0 0 0-2-.35 1.8 1.8 0 0 0-1.1 1.65V21a2 2 0 0 1-4 0v-.08a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-2 .35l-.05.05a2 2 0 0 1-2.83-2.83l.05-.05a1.8 1.8 0 0 0 .35-2 1.8 1.8 0 0 0-1.65-1.1H2.5a2 2 0 0 1 0-4h.08a1.8 1.8 0 0 0 1.65-1.1 1.8 1.8 0 0 0-.35-2l-.05-.05a2 2 0 0 1 2.83-2.83l.05.05a1.8 1.8 0 0 0 2 .35 1.8 1.8 0 0 0 1.1-1.65V2.5a2 2 0 0 1 4 0v.08a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.35l.05-.05a2 2 0 0 1 2.83 2.83l-.05.05a1.8 1.8 0 0 0-.35 2 1.8 1.8 0 0 0 1.65 1.1h.08a2 2 0 0 1 0 4h-.08A1.8 1.8 0 0 0 19.4 15z"/></svg>'
+};
+
+function uiIcon(name, extraClass = '') {
+  return `<span class="ui-icon ${extraClass}" aria-hidden="true">${UI_ICON_SVGS[name] || ''}</span>`;
+}
 
 function cleanInput(value = '', maxLength = 80) {
   return String(value || '')
@@ -167,56 +184,36 @@ function sortFeedPosts(posts = []) {
 }
 
 function getPersonalizedFeedPosts() {
-  if (!state.profile) return { posts: [], ownPosts: [], followedPosts: [], trendingPosts: [] };
+  if (!state.profile) return { posts: [], ownPosts: [], followedPosts: [] };
 
-  const cleanPosts = state.posts.filter((post) => post.authorId && !state.blocked.has(post.authorId));
+  const cleanPosts = state.posts.filter((post) => post.authorId && post.postKind !== 'story' && !state.blocked.has(post.authorId));
   const ownPosts = cleanPosts.filter((post) => post.authorId === state.profile.uid);
   const followedPosts = cleanPosts.filter((post) => state.following.has(post.authorId));
-  const trendingPosts = sortFeedPosts(cleanPosts.filter(isTrendingPost));
 
   if (!state.following.size) {
     return {
-      posts: sortFeedPosts(ownPosts),
+      posts: sortFeedPosts(ownPosts).map((post) => ({ ...post, feedReason: 'Your post' })),
       ownPosts,
-      followedPosts,
-      trendingPosts: []
+      followedPosts
     };
   }
 
-  const baseFeed = sortFeedPosts([...ownPosts, ...followedPosts]);
-  const merged = [];
   const usedIds = new Set();
-  let trendingIndex = 0;
-
-  baseFeed.forEach((post, index) => {
-    if (!usedIds.has(post.id)) {
-      merged.push({ ...post, feedReason: post.authorId === state.profile.uid ? 'Your post' : '' });
+  const posts = sortFeedPosts([...ownPosts, ...followedPosts])
+    .filter((post) => {
+      if (usedIds.has(post.id)) return false;
       usedIds.add(post.id);
-    }
-
-    const shouldInsertTrending = (index + 1) % 5 === 0 || (baseFeed.length < 4 && index === baseFeed.length - 1);
-    if (shouldInsertTrending && trendingPosts[trendingIndex]) {
-      const trend = trendingPosts[trendingIndex++];
-      if (trend && !usedIds.has(trend.id)) {
-        merged.push({ ...trend, feedReason: 'Trending' });
-        usedIds.add(trend.id);
-      }
-    }
-  });
-
-  while (merged.length < 8 && trendingPosts[trendingIndex]) {
-    const trend = trendingPosts[trendingIndex++];
-    if (!usedIds.has(trend.id)) {
-      merged.push({ ...trend, feedReason: 'Trending' });
-      usedIds.add(trend.id);
-    }
-  }
+      return true;
+    })
+    .map((post) => ({
+      ...post,
+      feedReason: post.authorId === state.profile.uid ? 'Your post' : ''
+    }));
 
   return {
-    posts: merged,
+    posts,
     ownPosts,
-    followedPosts,
-    trendingPosts
+    followedPosts
   };
 }
 
@@ -266,6 +263,10 @@ const views = {
   postMediaInput: $('#post-media'),
   mediaPreview: $('#media-preview'),
   postsList: $('#posts-list'),
+  storiesTray: $('#stories-tray'),
+  rightRail: $('#right-rail'),
+  videoFeedList: $('#video-feed-list'),
+  mediaStudioModal: $('#media-studio-modal'),
   peopleList: $('#people-list'),
   peopleSearch: $('#people-search'),
   conversationList: $('#conversation-list'),
@@ -306,7 +307,12 @@ const views = {
   followList: $('#follow-list'),
   likesModal: $('#likes-modal'),
   likesModalTitle: $('#likes-modal-title'),
-  likesList: $('#likes-list')
+  likesList: $('#likes-list'),
+  storyModal: $('#story-modal'),
+  storyViewerTitle: $('#story-viewer-title'),
+  storyViewerBody: $('#story-viewer-body'),
+  settingsNav: $('#settings-nav'),
+  settingsPanels: $('#settings-panels')
 };
 
 boot();
@@ -345,10 +351,35 @@ function bindStaticEvents() {
   $('#settings-logout')?.addEventListener('click', handleLogout);
   $('#delete-account')?.addEventListener('click', handleDeleteAccount);
   $('#post-form')?.addEventListener('submit', handleCreatePost);
+  $('#create-story-btn')?.addEventListener('click', () => {
+    setCreateKind('story');
+    switchView('create');
+    setTimeout(() => $('#post-media')?.click(), 80);
+  });
+  $('#open-media-studio')?.addEventListener('click', openMediaStudio);
+  $$('[data-close-media-studio]').forEach((button) => button.addEventListener('click', closeMediaStudio));
+  $('#studio-muted')?.addEventListener('change', (event) => {
+    $('[name="videoMuted"]', $('#post-form')).checked = event.target.checked;
+  });
+  $('#studio-loop')?.addEventListener('change', (event) => {
+    $('[name="videoLoop"]', $('#post-form')).checked = event.target.checked;
+  });
   views.messageForm?.addEventListener('submit', handleSendMessage);
   $('#profile-form')?.addEventListener('submit', handleProfileSave);
   $('#theme-options')?.addEventListener('change', handleThemeChange);
   $('#hide-activity-toggle')?.addEventListener('change', handleActivityToggle);
+  $('#password-form')?.addEventListener('submit', handlePasswordChange);
+  $('#send-reset-email')?.addEventListener('click', handlePasswordResetEmail);
+  views.settingsNav?.addEventListener('click', handleSettingsNav);
+
+  $$('[data-view-target="create"]').forEach((button) => {
+    button.addEventListener('click', () => switchView('create'));
+  });
+
+  $$('[name="postKind"]', $('#post-form')).forEach((input) => {
+    input.addEventListener('change', () => updateCreateModeUI());
+  });
+  updateCreateModeUI();
 
   $('[name="content"]', $('#post-form'))?.addEventListener('input', (event) => {
     $('#post-count').textContent = `${event.target.value.length} / 800`;
@@ -369,6 +400,7 @@ function bindStaticEvents() {
   views.copyPostLink?.addEventListener('click', copyShareLink);
   views.markNotificationsRead?.addEventListener('click', handleMarkNotificationsRead);
   $$('[data-close-likes]').forEach((button) => button.addEventListener('click', closeLikesModal));
+  $$('[data-close-story]').forEach((button) => button.addEventListener('click', closeStoryViewer));
 
   $('#emoji-toggle')?.addEventListener('click', () => toggleChatTools('emoji'));
   $('#gif-toggle')?.addEventListener('click', () => toggleChatTools('gif'));
@@ -386,8 +418,10 @@ function bindStaticEvents() {
 function switchView(target) {
   const labels = {
     feed: ['Welcome back', 'Feed'],
-    discover: ['Explore', 'Discover'],
+    video: ['Watch', 'Video feed'],
+    discover: ['Explore', 'Search'],
     messages: ['Inbox', 'Messages'],
+    create: ['Create', 'Post or story'],
     notifications: ['Activity', 'Notifications'],
     profile: ['Profile', 'Profile'],
     settings: ['Account', 'Settings']
@@ -399,6 +433,8 @@ function switchView(target) {
   views.topbarTitle.textContent = labels[target]?.[1] || 'Pixora';
 
   if (target === 'settings') renderSettingsPanel();
+  if (target === 'discover') renderPeople();
+  if (target === 'video') renderVideoFeed();
   if (target === 'notifications') {
     renderNotifications();
     handleMarkNotificationsRead({ silent: true });
@@ -428,6 +464,26 @@ async function handleDeleteAccount() {
   }
 }
 
+function setCreateKind(kind = 'post') {
+  const next = kind === 'story' ? 'story' : 'post';
+  const radio = $(`[name="postKind"][value="${next}"]`, $('#post-form'));
+  if (radio) radio.checked = true;
+  updateCreateModeUI();
+}
+
+function updateCreateModeUI() {
+  const form = $('#post-form');
+  if (!form) return;
+  const kind = new FormData(form).get('postKind') === 'story' ? 'story' : 'post';
+  form.dataset.kind = kind;
+  const textarea = $('[name="content"]', form);
+  const publish = $('#publish-submit', form) || $('button[type="submit"]', form);
+  if (textarea) textarea.placeholder = kind === 'story'
+    ? 'Write a short story caption...'
+    : 'Share something with your circle...';
+  if (publish) publish.textContent = kind === 'story' ? 'Publish story' : 'Publish post';
+}
+
 async function handleCreatePost(event) {
   event.preventDefault();
   if (!state.profile) return;
@@ -437,7 +493,8 @@ async function handleCreatePost(event) {
   const data = Object.fromEntries(new FormData(form));
   const file = data.mediaFile;
 
-  setButtonLoading(button, true, file?.size ? 'Preparing image...' : 'Publishing...');
+  const mediaLabel = file?.type?.startsWith('video/') ? 'video' : 'image';
+  setButtonLoading(button, true, file?.size ? `Preparing ${mediaLabel}...` : 'Publishing...');
 
   try {
     if (ensureNotBanned()) return;
@@ -448,12 +505,17 @@ async function handleCreatePost(event) {
     }
 
     const media = file?.size ? await uploadPostMedia(file, state.profile.uid) : null;
-    setButtonLoading(button, true, 'Publishing...');
-    await createPost(state.profile, data.content, media);
+    setButtonLoading(button, true, data.postKind === 'story' ? 'Publishing story...' : 'Publishing...');
+    await createPost(state.profile, data.content, media, {
+      postKind: data.postKind || 'post',
+      videoMuted: data.videoMuted === 'on',
+      videoLoop: data.videoLoop === 'on'
+    });
     form.reset();
     clearMediaPreview();
     $('#post-count').textContent = '0 / 800';
-    showToast('Post published.');
+    showToast(data.postKind === 'story' ? 'Story published.' : 'Post published.');
+    if (data.postKind === 'story') switchView('feed');
   } catch (error) {
     showToast(friendlyError(error), 'error');
   } finally {
@@ -539,6 +601,7 @@ function attachRealtimeListeners(uid) {
       renderCurrentUser();
       renderSettingsPanel();
       renderPeople();
+      renderVideoFeed();
       renderConversations();
       renderProfilePanel();
       renderPosts();
@@ -549,6 +612,7 @@ function attachRealtimeListeners(uid) {
     listenToPosts((posts) => {
       state.posts = posts;
       renderPosts();
+      renderVideoFeed();
       scrollToLinkedPost();
       renderProfilePanel();
       renderSettingsPanel();
@@ -560,6 +624,7 @@ function attachRealtimeListeners(uid) {
       state.users = users;
       users.forEach((user) => state.profileCache.set(user.uid, user));
       renderPeople();
+      renderVideoFeed();
       renderConversations();
       renderProfilePanel();
       renderPosts();
@@ -571,6 +636,7 @@ function attachRealtimeListeners(uid) {
       state.following = following;
       if (state.viewingProfileUid === uid) state.viewingStats = { uid, followers: state.followers.size, following: following.size };
       renderPeople();
+      renderVideoFeed();
       renderProfilePanel();
       renderSettingsPanel();
       renderPosts();
@@ -604,6 +670,7 @@ function attachRealtimeListeners(uid) {
     listenToBlocked(uid, (blocked) => {
       state.blocked = blocked;
       renderPeople();
+      renderVideoFeed();
       renderPosts();
       renderProfilePanel();
       renderConversations();
@@ -692,6 +759,58 @@ async function handleActivityToggle(event) {
   }
 }
 
+function handleSettingsNav(event) {
+  const button = event.target.closest('[data-settings-tab]');
+  if (!button) return;
+  const target = button.dataset.settingsTab;
+  $$('.settings-tab').forEach((item) => item.classList.toggle('active', item.dataset.settingsTab === target));
+  $$('.settings-panel').forEach((panel) => panel.classList.toggle('active', panel.dataset.settingsPanel === target));
+}
+
+async function handlePasswordChange(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $('button[type="submit"]', form);
+  const data = Object.fromEntries(new FormData(form));
+
+  if (!data.newPassword || String(data.newPassword).length < 6) {
+    showToast('Password must be at least 6 characters.', 'error');
+    return;
+  }
+
+  if (data.newPassword !== data.confirmPassword) {
+    showToast('Both password fields must match.', 'error');
+    return;
+  }
+
+  setButtonLoading(button, true, 'Updating...');
+
+  try {
+    await changeCurrentUserPassword(data.newPassword);
+    form.reset();
+    showToast('Password changed.');
+  } catch (error) {
+    showToast(`${friendlyError(error)} If Firebase asks for recent login, use the reset email button below.`, 'error');
+  } finally {
+    setButtonLoading(button, false);
+  }
+}
+
+async function handlePasswordResetEmail() {
+  const email = state.profile?.email || state.authUser?.email;
+  if (!email) {
+    showToast('No email found for this account.', 'error');
+    return;
+  }
+
+  try {
+    await sendResetPasswordEmail(email);
+    showToast(`Password reset email sent to ${email}.`);
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
 async function updateActivityNow() {
   if (!state.profile?.uid || state.profile.hideActivity) return;
   try {
@@ -707,6 +826,160 @@ function activityText(user = {}) {
   return `Active ${timeAgo(user.lastActiveAt)}`;
 }
 
+
+function openMediaStudio() {
+  if (!views.mediaStudioModal) return;
+  $('#studio-muted').checked = Boolean($('[name="videoMuted"]', $('#post-form'))?.checked);
+  $('#studio-loop').checked = Boolean($('[name="videoLoop"]', $('#post-form'))?.checked);
+  views.mediaStudioModal.classList.remove('hidden');
+}
+
+function closeMediaStudio() {
+  views.mediaStudioModal?.classList.add('hidden');
+}
+
+function renderStoriesTray() {
+  if (!views.storiesTray || !state.profile) return;
+  const storyPosts = state.posts
+    .filter((post) => post.postKind === 'story' && post.authorId && !state.blocked.has(post.authorId))
+    .sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+
+  const stories = storyPosts.slice(0, 18);
+
+  if (!stories.length) {
+    views.storiesTray.innerHTML = '<span class="soft-note story-empty-note">Stories from your circle will appear here.</span>';
+    return;
+  }
+
+  const storyCountByUser = storyPosts.reduce((map, story) => {
+    map.set(story.authorId, (map.get(story.authorId) || 0) + 1);
+    return map;
+  }, new Map());
+
+  views.storiesTray.innerHTML = stories.map((story) => {
+    const user = findUser(story.authorId) || {
+      uid: story.authorId,
+      displayName: story.authorName,
+      username: story.authorUsername,
+      avatarUrl: story.authorAvatarUrl
+    };
+    const count = storyCountByUser.get(story.authorId) || 1;
+    const label = user.uid === state.profile.uid ? 'Your story' : user.username || 'story';
+    return `
+      <button class="story-chip" type="button" data-story-profile="${escapeHTML(user.uid)}" data-story-id="${escapeHTML(story.id)}">
+        <span class="story-ring">${avatarTemplate(user)}${count > 1 ? `<em>${formatCount(count)}</em>` : ''}</span>
+        <small>${escapeHTML(label)}</small>
+      </button>
+    `;
+  }).join('');
+
+  $$('[data-story-profile]', views.storiesTray).forEach((button) => {
+    button.addEventListener('click', () => openStoryViewer(button.dataset.storyProfile, button.dataset.storyId));
+  });
+}
+
+function toTime(value) {
+  if (!value) return 0;
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  return new Date(value).getTime() || 0;
+}
+
+function openStoryViewer(uid, selectedStoryId = '') {
+  if (!views.storyModal || !views.storyViewerBody) return;
+  const stories = state.posts
+    .filter((post) => post.postKind === 'story' && post.authorId === uid && !state.blocked.has(post.authorId))
+    .sort((a, b) => toTime(a.createdAt) - toTime(b.createdAt));
+
+  if (!stories.length) return;
+
+  const index = Math.max(0, stories.findIndex((story) => story.id === selectedStoryId));
+  state.storyViewer = { uid, stories, index: index === -1 ? stories.length - 1 : index };
+  views.storyModal.classList.remove('hidden');
+  renderActiveStory();
+}
+
+function renderActiveStory() {
+  if (!views.storyViewerBody || !state.storyViewer?.stories?.length) return;
+  const { uid, stories, index } = state.storyViewer;
+  const story = stories[index] || stories[0];
+  const user = findUser(uid) || { displayName: story.authorName, username: story.authorUsername, avatarUrl: story.authorAvatarUrl };
+  views.storyViewerTitle.textContent = `${user.displayName || user.username || 'Story'} ${stories.length > 1 ? `${index + 1}/${stories.length}` : ''}`;
+  const media = story.mediaUrl
+    ? (story.mediaType === 'video'
+      ? `<div class="video-shell story-video"><video src="${escapeHTML(story.mediaUrl)}" playsinline autoplay muted loop preload="metadata" controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video></div>`
+      : `<img src="${escapeHTML(story.mediaUrl)}" alt="Story media" />`)
+    : '';
+  views.storyViewerBody.innerHTML = `
+    <div class="story-progress-row">
+      ${stories.map((_, progressIndex) => `<span class="${progressIndex === index ? 'active' : ''}"></span>`).join('')}
+    </div>
+    <div class="story-viewer-user">
+      ${avatarTemplate(user)}
+      <span><strong>${escapeHTML(user.displayName || 'User')}</strong><small>@${escapeHTML(user.username || 'user')} · ${escapeHTML(timeAgo(story.createdAt))}</small></span>
+    </div>
+    ${media}
+    ${story.content ? `<p class="story-caption">${escapeHTML(story.content)}</p>` : ''}
+    ${stories.length > 1 ? `
+      <div class="story-nav-actions">
+        <button class="ghost-btn" type="button" data-story-prev ${index <= 0 ? 'disabled' : ''}>Previous</button>
+        <button class="primary-btn" type="button" data-story-next ${index >= stories.length - 1 ? 'disabled' : ''}>Next</button>
+      </div>
+    ` : ''}
+  `;
+
+  $('[data-story-prev]', views.storyViewerBody)?.addEventListener('click', () => {
+    if (state.storyViewer.index > 0) {
+      state.storyViewer.index -= 1;
+      renderActiveStory();
+    }
+  });
+
+  $('[data-story-next]', views.storyViewerBody)?.addEventListener('click', () => {
+    if (state.storyViewer.index < state.storyViewer.stories.length - 1) {
+      state.storyViewer.index += 1;
+      renderActiveStory();
+    }
+  });
+}
+
+function closeStoryViewer() {
+  views.storyModal?.classList.add('hidden');
+  state.storyViewer = null;
+  if (views.storyViewerBody) views.storyViewerBody.innerHTML = '';
+}
+
+function renderRightRail() {
+  if (!views.rightRail || !state.profile) return;
+  const suggestions = getSuggestedFollowUsers(5);
+
+  views.rightRail.innerHTML = `
+    <section class="rail-profile-card">
+      ${avatarTemplate(state.profile)}
+      <div>
+        <strong>${escapeHTML(state.profile.displayName || 'User')}</strong>
+        <span>@${escapeHTML(state.profile.username || 'user')}</span>
+      </div>
+      <button type="button" data-rail-profile>Profile</button>
+    </section>
+    <section class="rail-card">
+      <div class="rail-card-head"><strong>Suggested for you</strong><span>Follow more people</span></div>
+      ${suggestions.length ? suggestions.map((user) => `
+        <article class="rail-user-row">
+          <button class="rail-user-info" type="button" data-rail-open-user="${escapeHTML(user.uid)}">
+            ${avatarTemplate(user)}
+            <span><strong>${escapeHTML(user.displayName || 'User')}</strong><small>@${escapeHTML(user.username || 'user')}</small></span>
+          </button>
+          <button class="rail-follow" type="button" data-rail-follow="${escapeHTML(user.uid)}">Follow</button>
+        </article>
+      `).join('') : '<p class="soft-note">No suggestions yet.</p>'}
+    </section>
+  `;
+
+  $('[data-rail-profile]', views.rightRail)?.addEventListener('click', () => openUserProfile(state.profile.uid));
+  $$('[data-rail-open-user]', views.rightRail).forEach((button) => button.addEventListener('click', () => openUserProfile(button.dataset.railOpenUser)));
+  $$('[data-rail-follow]', views.rightRail).forEach((button) => button.addEventListener('click', () => toggleFollow(findUser(button.dataset.railFollow))));
+}
+
 function renderCurrentUser() {
   if (!state.profile) return;
 
@@ -717,6 +990,12 @@ function renderCurrentUser() {
       <span>@${escapeHTML(state.profile.username)}</span>
     </div>
   `;
+
+  const profileNavIcon = document.querySelector('.nav-profile .nav-icon');
+  if (profileNavIcon) {
+    profileNavIcon.classList.add('profile-nav-avatar-slot');
+    profileNavIcon.innerHTML = avatarTemplate(state.profile, 'tiny');
+  }
 
   renderAvatarInto(views.composerAvatar, state.profile);
 }
@@ -738,6 +1017,10 @@ function renderSettingsPanel() {
   if (hideToggle) hideToggle.checked = Boolean(state.profile.hideActivity);
   const currentTheme = state.profile.theme || state.currentTheme || 'day';
   $$('[name="themeMode"]').forEach((input) => { input.checked = input.value === currentTheme; });
+  if (!document.querySelector('.settings-panel.active')) {
+    $('[data-settings-tab="profile"]')?.classList.add('active');
+    $('[data-settings-panel="profile"]')?.classList.add('active');
+  }
 
   const savedPosts = state.posts.filter((post) => post.savedBy.includes(state.profile.uid) && !state.blocked.has(post.authorId));
   renderPostsInto(views.savedPostsList, savedPosts, {
@@ -816,7 +1099,7 @@ function renderProfilePanel() {
 
   views.profileHero.innerHTML = `
     <div class="profile-cover ${user.coverUrl ? 'has-cover' : ''}"${coverStyle}>
-      ${isMe ? '<button class="cover-change-btn" type="button" data-cover-pick>Change cover</button>' : ''}
+      ${isMe ? `<button class="profile-settings-fab" type="button" data-view-target="settings" title="Settings" aria-label="Open settings">${uiIcon('settings')}</button><button class="cover-change-btn" type="button" data-cover-pick>Change cover</button>` : ''}
     </div>
     <div class="profile-identity">
       ${avatarTemplate(user, 'xl')}
@@ -972,6 +1255,8 @@ function renderFollowModal() {
 
 function renderPosts() {
   if (!views.postsList || !state.profile) return;
+  renderStoriesTray();
+  renderRightRail();
 
   const feed = getPersonalizedFeedPosts();
 
@@ -999,7 +1284,7 @@ function renderPosts() {
     intro: shouldShowFeedIntro() ? {
       kicker: 'Personalized feed',
       title: 'Posts from your circle',
-      body: 'Your feed is based on people you follow, your own recent posts, and occasional trending posts with strong engagement.',
+      body: 'Your feed shows people you follow and your own posts, so everything stays personal and easy to follow.',
       dismissible: true
     } : null,
     emptyTitle: 'Your feed is quiet',
@@ -1187,15 +1472,28 @@ function bindMiniFollowSuggestions(container) {
   });
 }
 
+
+function getLivePostAuthor(post = {}) {
+  const liveUser = findUser(post.authorId) || {};
+  return {
+    uid: post.authorId,
+    displayName: liveUser.displayName || post.authorName || 'User',
+    username: liveUser.username || post.authorUsername || 'user',
+    avatarUrl: liveUser.avatarUrl || post.authorAvatarUrl || '',
+    coverUrl: liveUser.coverUrl || ''
+  };
+}
+
 function postTemplate(post) {
   const uid = state.profile?.uid;
+  const author = getLivePostAuthor(post);
   const canDelete = uid === post.authorId;
   const liked = post.likedBy.includes(uid);
   const saved = post.savedBy.includes(uid);
   const commentsOpen = state.openComments.has(post.id);
   const media = mediaTemplate(post);
   const feedBadge = post.feedReason
-    ? `<span class="feed-reason-badge ${post.feedReason === 'Trending' ? 'trending' : 'own'}">${escapeHTML(post.feedReason)}</span>`
+    ? `<span class="feed-reason-badge ${'own'}">${escapeHTML(post.feedReason)}</span>`
     : '';
 
   return `
@@ -1203,22 +1501,28 @@ function postTemplate(post) {
       ${feedBadge}
       <header class="post-header">
         <button class="post-author as-button" type="button" data-open-profile="${escapeHTML(post.authorId)}">
-          ${avatarTemplate({ displayName: post.authorName, username: post.authorUsername, avatarUrl: post.authorAvatarUrl })}
+          ${avatarTemplate(author)}
           <div class="post-meta">
-            <strong>${escapeHTML(post.authorName || 'User')}</strong>
-            <span>@${escapeHTML(post.authorUsername || 'user')} · ${escapeHTML(timeAgo(post.createdAt))}</span>
+            <strong>${escapeHTML(author.displayName || 'User')}</strong>
+            <span>@${escapeHTML(author.username || 'user')} · ${escapeHTML(timeAgo(post.createdAt))}</span>
           </div>
         </button>
-        ${canDelete ? '<button class="icon-btn danger" type="button" data-delete-post title="Delete post">×</button>' : ''}
+        ${canDelete ? `
+          <div class="post-more-wrap">
+            <button class="icon-btn post-more-btn" type="button" data-post-menu-toggle title="Post options" aria-label="Post options">${uiIcon('more')}</button>
+            <div class="post-more-menu">
+              <button class="danger" type="button" data-delete-post>Delete post</button>
+            </div>
+          </div>` : ''}
       </header>
       ${post.content ? `<p class="post-content">${escapeHTML(post.content)}</p>` : ''}
       ${media}
       <footer class="post-actions">
-        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post>${liked ? '♥' : '♡'} <span>${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post>${uiIcon(liked ? 'heartFilled' : 'heart')} <span>${formatCount(post.likeCount)}</span></button>
         <button class="action-btn" type="button" data-view-likes>Liked by <span>${formatCount(post.likeCount)}</span></button>
-        <button class="action-btn" type="button" data-toggle-comments>💬 <span>${formatCount(post.commentCount)}</span></button>
-        <button class="action-btn ${saved ? 'active' : ''}" type="button" data-save-post>🔖 <span>${saved ? 'Saved' : 'Save'}</span></button>
-        <button class="action-btn" type="button" data-share-post>↗ <span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
+        <button class="action-btn" type="button" data-toggle-comments>${uiIcon('comment')} <span>${formatCount(post.commentCount)}</span></button>
+        <button class="action-btn ${saved ? 'active' : ''}" type="button" data-save-post>${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')} <span>${saved ? 'Saved' : 'Save'}</span></button>
+        <button class="action-btn" type="button" data-share-post>${uiIcon('share')} <span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
       </footer>
       <section class="comments-panel ${commentsOpen ? 'open' : ''}" data-comments-panel>
         <div class="comments-list" data-comments-list="${escapeHTML(post.id)}"></div>
@@ -1239,7 +1543,13 @@ function postTemplate(post) {
 function mediaTemplate(post) {
   if (!post.mediaUrl) return '';
   if (post.mediaType === 'video') {
-    return `<video class="post-media" src="${escapeHTML(post.mediaUrl)}" controls playsinline preload="metadata"></video>`;
+    const muted = post.videoMuted ? 'muted' : '';
+    const loop = post.videoLoop ? 'loop' : '';
+    return `<div class="video-shell" data-video-shell>
+      <video class="post-media" src="${escapeHTML(post.mediaUrl)}" ${muted} ${loop} playsinline preload="metadata" controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video>
+      <button class="video-play-btn" type="button" data-video-toggle>▶</button>
+      <button class="video-mute-btn" type="button" data-video-mute>${post.videoMuted ? '🔇' : '🔊'}</button>
+    </div>`;
   }
   return `<img class="post-media" src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`;
 }
@@ -1248,6 +1558,44 @@ function bindPostActions(container) {
   $$('[data-open-profile]', container).forEach((button) => {
     button.addEventListener('click', () => openUserProfile(button.dataset.openProfile));
   });
+
+  $$('[data-video-toggle]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const video = button.closest('[data-video-shell]')?.querySelector('video');
+      if (!video) return;
+      if (video.paused) {
+        video.play().catch(() => {});
+        button.textContent = 'Ⅱ';
+      } else {
+        video.pause();
+        button.textContent = '▶';
+      }
+    });
+  });
+
+  $$('[data-video-mute]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const video = button.closest('[data-video-shell]')?.querySelector('video');
+      if (!video) return;
+      video.muted = !video.muted;
+      button.textContent = video.muted ? '🔇' : '🔊';
+    });
+  });
+
+  $$('[data-post-menu-toggle]', container).forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const wrap = button.closest('.post-more-wrap');
+      $$('.post-more-wrap.open').forEach((item) => { if (item !== wrap) item.classList.remove('open'); });
+      wrap?.classList.toggle('open');
+    });
+  });
+
+  document.addEventListener('click', () => {
+    $$('.post-more-wrap.open').forEach((item) => item.classList.remove('open'));
+    $$('.message-more-wrap.open').forEach((item) => item.classList.remove('open'));
+    $$('.chat-more-wrap.open').forEach((item) => item.classList.remove('open'));
+  }, { once: true });
 
   $$('[data-delete-post]', container).forEach((button) => {
     button.addEventListener('click', async () => {
@@ -1324,11 +1672,16 @@ function bindPostActions(container) {
   $$('[data-comment-form]', container).forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (form.dataset.submitting === 'true') return;
+      form.dataset.submitting = 'true';
       const post = getPostFromButton(form);
       const input = $('[name="comment"]', form);
+      const submitButton = $('button[type="submit"]', form);
       try {
         if (ensureNotBanned()) return;
-        const text = input.value;
+        const text = input.value.trim();
+        if (!text) return;
+        setButtonLoading(submitButton, true, 'Posting...');
         const moderation = scanContent(text);
         if (moderation.flagged) {
           await handleBlockedContent('comment', text, moderation);
@@ -1347,6 +1700,9 @@ function bindPostActions(container) {
           .forEach((user) => notifyCommentMention(post, state.profile, user, text).catch((error) => console.warn('Mention notification failed:', error)));
       } catch (error) {
         showToast(friendlyError(error), 'error');
+      } finally {
+        form.dataset.submitting = 'false';
+        setButtonLoading(submitButton, false);
       }
     });
   });
@@ -1861,50 +2217,172 @@ function renderLikesModal() {
   });
 }
 
-function renderPeople() {
-  if (!state.profile || !views.peopleList) return;
+function isMediaPost(post = {}) {
+  return Boolean(post.mediaUrl) && (post.mediaType === 'image' || post.mediaType === 'video') && post.postKind !== 'story';
+}
 
-  const term = views.peopleSearch?.value?.trim().toLowerCase() || '';
-  const recommended = state.posts
-    .filter((post) => post.authorId && post.authorId !== state.profile.uid && !state.blocked.has(post.authorId))
+function getExploreMediaPosts(term = '') {
+  const query = term.trim().toLowerCase();
+  return state.posts
+    .filter((post) => isMediaPost(post))
+    .filter((post) => post.authorId && !state.blocked.has(post.authorId))
     .filter((post) => {
-      const haystack = `${post.content || ''} ${post.authorName || ''} ${post.authorUsername || ''}`.toLowerCase();
-      return !term || haystack.includes(term);
+      if (!query) return true;
+      const author = getLivePostAuthor(post);
+      const haystack = `${post.content || ''} ${author.displayName || ''} ${author.username || ''}`.toLowerCase();
+      return haystack.includes(query);
     })
     .sort((a, b) => getViralScore(b) - getViralScore(a) || getPostAgeHours(a) - getPostAgeHours(b))
-    .slice(0, 36);
+    .slice(0, 60);
+}
 
-  if (!recommended.length) {
-    views.peopleList.innerHTML = emptyState('No recommended posts yet', 'As more people post and interact, recommended posts will appear here.');
+function renderVideoFeed() {
+  if (!views.videoFeedList || !state.profile) return;
+
+  const videos = state.posts
+    .filter((post) => post.mediaType === 'video' && post.mediaUrl && post.postKind !== 'story')
+    .filter((post) => post.authorId && !state.blocked.has(post.authorId))
+    .sort((a, b) => getViralScore(b) - getViralScore(a) || getPostAgeHours(a) - getPostAgeHours(b))
+    .slice(0, 40);
+
+  if (!videos.length) {
+    views.videoFeedList.innerHTML = emptyState('No videos yet', 'Video posts from Pixora users will appear here. Create a video post to start this feed.');
     return;
   }
 
-  views.peopleList.innerHTML = recommended.map((post) => {
-    const media = post.mediaUrl
-      ? (post.mediaType === 'video'
-        ? `<video src="${escapeHTML(post.mediaUrl)}" muted playsinline preload="metadata"></video>`
-        : `<img src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`)
-      : `<div class="discover-text-tile">${escapeHTML((post.content || 'Pixora post').slice(0, 120))}</div>`;
+  views.videoFeedList.innerHTML = videos.map((post) => videoReelTemplate(post)).join('');
+  bindPostActions(views.videoFeedList);
 
-    return `
-      <button class="discover-post-tile" type="button" data-discover-post="${escapeHTML(post.id)}">
-        ${media}
-        <span class="discover-post-overlay">
-          <strong>@${escapeHTML(post.authorUsername || 'user')}</strong>
-          <small>♡ ${formatCount(post.likeCount)} · 💬 ${formatCount(post.commentCount)}</small>
-        </span>
-      </button>
-    `;
-  }).join('');
-
-  $$('[data-discover-post]', views.peopleList).forEach((button) => {
+  $$('[data-video-open-post]', views.videoFeedList).forEach((button) => {
     button.addEventListener('click', () => {
-      const postId = button.dataset.discoverPost;
-      state.openComments.add(postId);
-      switchView('feed');
-      setTimeout(() => document.querySelector(`[data-post-id="${cssEscape(postId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+      const post = getPostFromButton(button);
+      if (!post) return;
+      state.openComments.add(post.id);
+      openUserProfile(post.authorId);
+      setTimeout(() => {
+        document.querySelector(`[data-post-id="${cssEscape(post.id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 160);
     });
   });
+}
+
+function videoReelTemplate(post) {
+  const uid = state.profile?.uid;
+  const author = getLivePostAuthor(post);
+  const liked = post.likedBy.includes(uid);
+  const saved = post.savedBy.includes(uid);
+  const canDelete = uid === post.authorId;
+
+  return `
+    <article class="video-reel-card post-card" data-post-id="${escapeHTML(post.id)}">
+      <div class="video-reel-media" data-video-shell>
+        <video src="${escapeHTML(post.mediaUrl)}" playsinline preload="metadata" loop controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video>
+        <button class="video-play-btn" type="button" data-video-toggle aria-label="Play video">▶</button>
+        <button class="video-mute-btn" type="button" data-video-mute aria-label="Mute video">🔇</button>
+      </div>
+      <div class="video-reel-caption">
+        <button class="post-author as-button" type="button" data-open-profile="${escapeHTML(post.authorId)}">
+          ${avatarTemplate(author)}
+          <div class="post-meta">
+            <strong>${escapeHTML(author.displayName || 'User')}</strong>
+            <span>@${escapeHTML(author.username || 'user')} · ${escapeHTML(timeAgo(post.createdAt))}</span>
+          </div>
+        </button>
+        ${post.content ? `<p>${escapeHTML(post.content)}</p>` : ''}
+      </div>
+      <aside class="video-reel-actions">
+        <button class="reel-action ${liked ? 'active' : ''}" type="button" data-like-post title="Like">${uiIcon(liked ? 'heartFilled' : 'heart')}<span>${formatCount(post.likeCount)}</span></button>
+        <button class="reel-action" type="button" data-video-open-post title="Comments">${uiIcon('comment')}<span>${formatCount(post.commentCount)}</span></button>
+        <button class="reel-action ${saved ? 'active' : ''}" type="button" data-save-post title="Save">${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')}<span>${saved ? 'Saved' : 'Save'}</span></button>
+        <button class="reel-action" type="button" data-share-post title="Share">${uiIcon('share')}<span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
+        ${canDelete ? `<div class="post-more-wrap reel-more"><button class="reel-action" type="button" data-post-menu-toggle title="More">${uiIcon('more')}</button><div class="post-more-menu"><button class="danger" type="button" data-delete-post>Delete post</button></div></div>` : ''}
+      </aside>
+    </article>
+  `;
+}
+
+function renderPeople() {
+  if (!state.profile || !views.peopleList) return;
+  renderRightRail();
+
+  const term = views.peopleSearch?.value?.trim().toLowerCase() || '';
+  const mediaPosts = getExploreMediaPosts(term);
+  const matchingUsers = term
+    ? state.users
+      .filter((user) => user.uid && user.uid !== state.profile.uid && !state.blocked.has(user.uid))
+      .filter((user) => `${user.displayName || ''} ${user.username || ''}`.toLowerCase().includes(term))
+      .slice(0, 8)
+    : [];
+
+  const userResults = matchingUsers.length ? `
+    <section class="explore-user-results">
+      <div class="explore-section-title"><strong>People</strong><span>Search results</span></div>
+      <div class="explore-user-list">
+        ${matchingUsers.map((user) => {
+          const following = state.following.has(user.uid);
+          return `
+            <article class="explore-user-card">
+              <button class="explore-user-info" type="button" data-explore-user="${escapeHTML(user.uid)}">
+                ${avatarTemplate(user)}
+                <span><strong>${escapeHTML(user.displayName || 'User')}</strong><small>@${escapeHTML(user.username || 'user')}</small></span>
+              </button>
+              <button class="rail-follow" type="button" data-explore-follow="${escapeHTML(user.uid)}">${following ? 'Following' : 'Follow'}</button>
+            </article>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  ` : '';
+
+  if (!mediaPosts.length && !matchingUsers.length) {
+    views.peopleList.innerHTML = emptyState('Nothing found', 'Try another name, username, or caption. Only media posts appear in Explore.');
+    return;
+  }
+
+  const grid = mediaPosts.length ? `
+    <section class="explore-media-section">
+      <div class="explore-section-title"><strong>Media posts</strong><span>Photos and videos from across Pixora</span></div>
+      <div class="explore-media-grid">
+        ${mediaPosts.map((post) => {
+          const author = getLivePostAuthor(post);
+          const media = post.mediaType === 'video'
+            ? `<video src="${escapeHTML(post.mediaUrl)}" muted playsinline preload="metadata" oncontextmenu="return false"></video><span class="tile-type-badge">▶</span>`
+            : `<img src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`;
+
+          return `
+            <button class="discover-post-tile" type="button" data-discover-post="${escapeHTML(post.id)}" data-discover-author="${escapeHTML(post.authorId)}">
+              ${media}
+              <span class="discover-post-overlay">
+                <strong>@${escapeHTML(author.username || 'user')}</strong>
+                <small>♡ ${formatCount(post.likeCount)} · 💬 ${formatCount(post.commentCount)}</small>
+              </span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  ` : '';
+
+  views.peopleList.innerHTML = `${userResults}${grid}`;
+
+  $$('[data-explore-user]', views.peopleList).forEach((button) => button.addEventListener('click', () => openUserProfile(button.dataset.exploreUser)));
+  $$('[data-explore-follow]', views.peopleList).forEach((button) => {
+    button.addEventListener('click', () => toggleFollow(findUser(button.dataset.exploreFollow)));
+  });
+  $$('[data-discover-post]', views.peopleList).forEach((button) => {
+    button.addEventListener('click', () => {
+      const authorId = button.dataset.discoverAuthor;
+      openUserProfile(authorId);
+      setTimeout(() => document.querySelector(`[data-post-id="${cssEscape(button.dataset.discoverPost)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 180);
+    });
+  });
+}
+
+function conversationPreviewText(conversation = {}) {
+  const preview = String(conversation.lastMessage || '').trim();
+  if (!preview) return 'No messages yet';
+  if (preview.toLowerCase().includes('encrypted message')) return 'Open chat to view the latest message';
+  return preview.length > 54 ? `${preview.slice(0, 54)}...` : preview;
 }
 
 function renderConversations() {
@@ -1927,7 +2405,7 @@ function renderConversations() {
         ${avatarTemplate(other)}
         <span class="conversation-copy">
           <strong>${escapeHTML(other.displayName || 'User')}</strong>
-          <span>${escapeHTML(conversation.lastMessage || 'No messages yet')}</span>
+          <span>${escapeHTML(conversationPreviewText(conversation))}</span>
         </span>
       </button>
     `;
@@ -2013,12 +2491,22 @@ async function activateConversation(conversationId, otherUser) {
       </div>
     </button>
     <div class="chat-header-actions">
-      <button class="ghost-btn compact-action" type="button" data-audio-call>Audio</button>
-      <button class="primary-btn compact-action" type="button" data-video-call>Video</button>
-      <button class="ghost-btn danger compact-action" type="button" data-clear-chat>Delete chat</button>
+      <button class="chat-call-btn" type="button" data-audio-call title="Audio call" aria-label="Audio call">${uiIcon('phone')}</button>
+      <button class="chat-call-btn primary-call" type="button" data-video-call title="Video call" aria-label="Video call">${uiIcon('video')}</button>
+      <div class="chat-more-wrap">
+        <button class="chat-call-btn" type="button" data-chat-menu-toggle title="Conversation options" aria-label="Conversation options">${uiIcon('more')}</button>
+        <div class="chat-more-menu">
+          <button class="danger" type="button" data-clear-chat>Delete chat</button>
+        </div>
+      </div>
     </div>
   `;
   $('[data-chat-profile]', views.chatHeader)?.addEventListener('click', () => openUserProfile(otherUser.uid));
+  $('[data-chat-menu-toggle]', views.chatHeader)?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    views.chatHeader.querySelector('.chat-more-wrap')?.classList.toggle('open');
+  });
+
   $('[data-audio-call]', views.chatHeader)?.addEventListener('click', () => startCall('audio'));
   $('[data-video-call]', views.chatHeader)?.addEventListener('click', () => startCall('video'));
   $('[data-clear-chat]', views.chatHeader)?.addEventListener('click', handleClearChat);
@@ -2069,6 +2557,15 @@ function renderMessages(messages) {
     button.addEventListener('click', () => openUserProfile(button.dataset.messageMention));
   });
 
+  $$('[data-message-menu-toggle]', views.messagesList).forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const wrap = button.closest('.message-more-wrap');
+      $$('.message-more-wrap.open', views.messagesList).forEach((item) => { if (item !== wrap) item.classList.remove('open'); });
+      wrap?.classList.toggle('open');
+    });
+  });
+
   $$('[data-unsend-message]', views.messagesList).forEach((button) => {
     button.addEventListener('click', async () => {
       if (!window.confirm('Delete this message for everyone?')) return;
@@ -2113,7 +2610,13 @@ function messageTemplate(message) {
 
   return `
     <div class="message-bubble ${mine ? 'mine' : ''}" data-message-id="${escapeHTML(message.id)}">
-      ${mine ? `<button class="message-unsend" type="button" data-unsend-message="${escapeHTML(message.id)}" title="Delete for everyone">×</button>` : ''}
+      ${mine ? `
+        <div class="message-more-wrap">
+          <button class="message-more-btn" type="button" data-message-menu-toggle title="Message options" aria-label="Message options">⋯</button>
+          <div class="message-more-menu">
+            <button class="danger" type="button" data-unsend-message="${escapeHTML(message.id)}">Delete for everyone</button>
+          </div>
+        </div>` : ''}
       ${content.join('')}
       <small>${escapeHTML(timeAgo(message.createdAt))}</small>
     </div>
@@ -2339,7 +2842,7 @@ function renderSelectedMediaPreview() {
       showToast('Video upload needs Cloudinary. Add cloud name and unsigned preset in .env first.', 'error');
       return;
     }
-    views.mediaPreview.innerHTML = `<video src="${url}" controls playsinline muted></video><button type="button" data-clear-media>×</button>`;
+    views.mediaPreview.innerHTML = `<div class="video-shell preview-video"><video src="${url}" playsinline muted preload="metadata" controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video><button class="video-play-btn" type="button" onclick="const v=this.parentElement.querySelector('video'); if(v.paused){v.play();this.textContent='Ⅱ'}else{v.pause();this.textContent='▶'}">▶</button></div><button type="button" data-clear-media>×</button>`;
   } else {
     views.mediaPreview.innerHTML = `<img src="${url}" alt="Selected media" /><button type="button" data-clear-media>×</button>`;
   }

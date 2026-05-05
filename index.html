@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/pixora-favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/pixora-favicon.svg" />
     <title>Pixora — Social App</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,7 +29,7 @@
       <aside class="sidebar reveal-left" aria-label="Sidebar">
         <div class="sidebar-top">
           <div class="brand-stack">
-            <img src="/src/assets/pulse-mark.svg" alt="Pixora" class="brand-mark" />
+            <div class="ig-brand-icon" aria-hidden="true"><img src="/pixora-favicon.svg" alt="" /></div>
             <div class="sidebar-label">
               <strong>Pixora</strong>
               <span>Social studio</span>
@@ -37,12 +39,30 @@
         </div>
 
         <nav class="main-nav" aria-label="Main navigation">
-          <button class="nav-link active" type="button" data-view-target="feed" title="Feed"><span class="nav-icon">⌂</span><span class="nav-text">Feed</span></button>
-          <button class="nav-link" type="button" data-view-target="discover" title="Discover"><span class="nav-icon">⌕</span><span class="nav-text">Discover</span></button>
-          <button class="nav-link" type="button" data-view-target="messages" title="Messages"><span class="nav-icon">✉</span><span class="nav-text">Messages</span></button>
-          <button class="nav-link notification-nav" type="button" data-view-target="notifications" title="Notifications"><span class="nav-icon">♡</span><span class="nav-text">Notifications</span><span id="notification-badge" class="nav-badge hidden">0</span></button>
-          <button class="nav-link" type="button" data-view-target="profile" title="Profile"><span class="nav-icon">◉</span><span class="nav-text">Profile</span></button>
-          <button class="nav-link" type="button" data-view-target="settings" title="Settings"><span class="nav-icon">⚙</span><span class="nav-text">Settings</span></button>
+          <button class="nav-link nav-feed active" type="button" data-view-target="feed" title="Home" aria-label="Home">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.8 12 3l9 7.8v8.7a1.5 1.5 0 0 1-1.5 1.5h-5v-6.2h-5V21h-5A1.5 1.5 0 0 1 3 19.5z"/></svg></span><span class="nav-text">Home</span>
+          </button>
+          <button class="nav-link nav-video" type="button" data-view-target="video" title="Video feed" aria-label="Video feed">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="5"/><path d="m10 8 6 4-6 4z" class="fill-bg"/></svg></span><span class="nav-text">Video feed</span>
+          </button>
+          <button class="nav-link nav-explore" type="button" data-view-target="discover" title="Explore" aria-label="Explore">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span><span class="nav-text">Explore</span>
+          </button>
+          <button class="nav-link nav-messages" type="button" data-view-target="messages" title="Messages" aria-label="Messages">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H9l-5 4v-5.5z"/></svg></span><span class="nav-text">Messages</span>
+          </button>
+          <button class="nav-link nav-notifications notification-nav" type="button" data-view-target="notifications" title="Notifications" aria-label="Notifications">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 0 0-7.2 7.2l1 1L12 21l7.2-7 .95-.95a5.1 5.1 0 0 0 .05-7.25z"/></svg></span><span class="nav-text">Notifications</span><span id="notification-badge" class="nav-badge hidden">0</span>
+          </button>
+          <button class="nav-link nav-create create-nav-link" type="button" data-view-target="create" title="Create" aria-label="Create">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="nav-text">Create</span>
+          </button>
+          <button class="nav-link nav-profile" type="button" data-view-target="profile" title="Profile" aria-label="Profile">
+            <span class="nav-icon profile-nav-avatar-slot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 7a7 7 0 0 0-14 0"/></svg></span><span class="nav-text">Profile</span>
+          </button>
+          <button class="nav-link nav-settings" type="button" data-view-target="settings" title="Settings" aria-label="Settings">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="nav-text">Settings</span>
+          </button>
         </nav>
       </aside>
 
@@ -58,33 +78,84 @@
         </header>
 
         <section id="feed-view" class="view active" data-view="feed">
-          <form id="post-form" class="composer glass-card reveal-up" enctype="multipart/form-data">
-            <div id="composer-avatar" class="avatar"></div>
-            <div class="composer-body">
-              <textarea name="content" rows="4" maxlength="800" placeholder="Share an update with your circle..."></textarea>
-              <div id="media-preview" class="media-preview hidden"></div>
-              <div class="composer-actions">
-                <label class="upload-chip">
-                  <input id="post-media" name="mediaFile" type="file" accept="image/*,video/*" />
-                  <span>＋ Media</span>
-                </label>
-                <span id="post-count" class="soft-note">0 / 800</span>
-                <button class="primary-btn" type="submit">Publish</button>
-              </div>
+          <div class="ig-home-layout">
+            <main class="ig-feed-column">
+              <section class="stories-strip" aria-label="Stories and quick actions">
+                <button id="create-story-btn" class="story-chip story-create" type="button">
+                  <span class="story-ring story-add">＋</span>
+                  <small>Your story</small>
+                </button>
+                <div id="stories-tray" class="stories-tray"></div>
+              </section>
+              <section class="feed-create-prompt glass-card reveal-up">
+                <div>
+                  <span class="muted-label">Create</span>
+                  <h3>Share a post or story</h3>
+                  <p>Open the Create section to publish photos, videos, thoughts, or a quick story.</p>
+                </div>
+                <button class="primary-btn" type="button" data-view-target="create">＋ Create</button>
+              </section>
+              <div id="posts-list" class="posts-list"></div>
+            </main>
+
+            <aside id="right-rail" class="ig-right-rail" aria-label="Recommendations"></aside>
+          </div>
+        </section>
+
+
+        <section id="create-view" class="view" data-view="create">
+          <div class="create-shell">
+            <section class="create-intro glass-card reveal-up">
+              <span class="muted-label">Create</span>
+              <h2>Create something new</h2>
+              <p>Choose between a regular post or a short story. Posts stay on your profile, while stories appear in the top story row.</p>
+            </section>
+
+
+              <form id="post-form" class="composer instagram-composer reveal-up" enctype="multipart/form-data">
+                <div id="composer-avatar" class="avatar"></div>
+                <div class="composer-body">
+                  <div class="composer-mode-row" role="tablist" aria-label="Publish type">
+                    <label class="mode-pill"><input type="radio" name="postKind" value="post" checked /> Post</label>
+                    <label class="mode-pill"><input type="radio" name="postKind" value="story" /> Story</label>
+                    <button id="open-media-studio" class="ghost-btn media-studio-btn" type="button">Edit media</button>
+                  </div>
+                  <textarea name="content" rows="3" maxlength="800" placeholder="Share something with your circle..."></textarea>
+                  <div id="media-preview" class="media-preview hidden"></div>
+                  <div class="composer-actions">
+                    <label class="upload-chip">
+                      <input id="post-media" name="mediaFile" type="file" accept="image/*,video/*" />
+                      <span>＋ Photo / Video</span>
+                    </label>
+                    <span id="post-count" class="soft-note">0 / 800</span>
+                    <button id="publish-submit" class="primary-btn" type="submit">Publish post</button>
+                  </div>
+                </div>
+              </form>
+          </div>
+        </section>
+
+        <section id="video-view" class="view" data-view="video">
+          <div class="video-feed-shell">
+            <div class="video-feed-heading">
+              <span class="muted-label">Video feed</span>
+              <h2>Reels from Pixora</h2>
+              <p>Only video posts appear here, sorted by recent activity and engagement.</p>
             </div>
-          </form>
-          <div id="posts-list" class="posts-list"></div>
+            <div id="video-feed-list" class="video-feed-list"></div>
+          </div>
         </section>
 
         <section id="discover-view" class="view" data-view="discover">
-          <div class="section-heading">
+          <div class="section-heading explore-heading">
             <div>
-              <span class="muted-label">Recommended</span>
-              <h2>Explore posts</h2>
+              <span class="muted-label">Explore</span>
+              <h2>Search and discover</h2>
+              <p class="soft-note">Search people by name or username, and explore public media posts from across Pixora.</p>
             </div>
-            <input id="people-search" class="search-input" type="search" placeholder="Search posts, names, or usernames" />
+            <input id="people-search" class="search-input" type="search" placeholder="Search name, username, or media posts" />
           </div>
-          <div id="people-list" class="people-grid"></div>
+          <div id="people-list" class="people-grid explore-results"></div>
         </section>
 
         <section id="messages-view" class="view" data-view="messages">
@@ -106,10 +177,10 @@
                 <div id="messages-list" class="messages-list"></div>
                 <div id="chat-tools" class="chat-tools hidden"></div>
                 <form id="message-form" class="message-form" enctype="multipart/form-data">
-                  <button id="emoji-toggle" class="chat-tool-btn" type="button" title="Emoji">😊</button>
-                  <button id="gif-toggle" class="chat-tool-btn" type="button" title="GIF">GIF</button>
-                  <label class="chat-tool-btn" title="Send image">
-                    🖼
+                  <button id="emoji-toggle" class="chat-tool-btn" type="button" title="Emoji" aria-label="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01M8 14c1 1.6 2.4 2.4 4 2.4s3-.8 4-2.4"/></svg></button>
+                  <button id="gif-toggle" class="chat-tool-btn gif-pill" type="button" title="GIF" aria-label="GIF">GIF</button>
+                  <label class="chat-tool-btn" title="Send image" aria-label="Send image">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m7 16 4.2-4.2 3 3L16 13l4 4"/><circle cx="8.5" cy="9.5" r="1.5"/></svg>
                     <input id="message-image" name="imageFile" type="file" accept="image/*" />
                   </label>
                   <input name="message" type="text" autocomplete="off" maxlength="1000" placeholder="Write a message..." />
@@ -139,7 +210,7 @@
             <section class="profile-posts glass-card reveal-up">
               <div class="section-heading compact">
                 <div>
-                  <span id="profile-posts-kicker" class="muted-label">Timeline</span>
+                  <span id="profile-posts-kicker" class="muted-label">Profile feed</span>
                   <h2 id="profile-posts-title">Posts</h2>
                 </div>
               </div>
@@ -149,101 +220,142 @@
         </section>
 
         <section id="settings-view" class="view" data-view="settings">
-          <div class="settings-layout">
-            <section class="settings-card glass-card reveal-up">
-              <div class="section-heading compact">
-                <div>
-                  <span class="muted-label">Account</span>
-                  <h2>Profile settings</h2>
-                </div>
+          <div class="settings-shell glass-card reveal-up">
+            <aside id="settings-nav" class="settings-menu" aria-label="Settings sections">
+              <div class="settings-menu-heading">
+                <span class="muted-label">Settings</span>
+                <h3>Manage Pixora</h3>
               </div>
-              <form id="profile-form" class="settings-form" enctype="multipart/form-data">
-                <div class="cover-editor-row">
-                  <div id="settings-cover-preview" class="settings-cover-preview"><span>No cover image selected</span></div>
-                  <label class="upload-chip">
-                    <input id="cover-file" type="file" name="coverFile" accept="image/*" />
-                    <span>Change cover</span>
-                  </label>
+              <button class="settings-tab active" type="button" data-settings-tab="profile"><span>👤</span><strong>Profile</strong><small>Name, bio, photo</small></button>
+              <button class="settings-tab" type="button" data-settings-tab="appearance"><span>🎨</span><strong>Appearance</strong><small>Theme and layout</small></button>
+              <button class="settings-tab" type="button" data-settings-tab="privacy"><span>🛡</span><strong>Privacy</strong><small>Activity visibility</small></button>
+              <button class="settings-tab" type="button" data-settings-tab="library"><span>🔖</span><strong>Saved</strong><small>Your saved posts</small></button>
+              <button class="settings-tab" type="button" data-settings-tab="security"><span>🔐</span><strong>Security</strong><small>Password and account</small></button>
+            </aside>
+
+            <div id="settings-panels" class="settings-panels">
+              <section class="settings-panel active" data-settings-panel="profile">
+                <div class="section-heading compact">
+                  <div>
+                    <span class="muted-label">Account</span>
+                    <h2>Profile settings</h2>
+                  </div>
                 </div>
-                <input type="hidden" name="coverUrl" />
-                <div class="avatar-editor-row">
-                  <div id="settings-avatar-preview" class="avatar xl"></div>
-                  <label class="upload-chip">
-                    <input id="avatar-file" type="file" name="avatarFile" accept="image/*" />
-                    <span>Change photo</span>
-                  </label>
-                </div>
-                <input type="hidden" name="avatarUrl" />
-                <div class="field-grid">
+                <form id="profile-form" class="settings-form" enctype="multipart/form-data">
+                  <div class="cover-editor-row">
+                    <div id="settings-cover-preview" class="settings-cover-preview"><span>No cover image selected</span></div>
+                    <label class="upload-chip">
+                      <input id="cover-file" type="file" name="coverFile" accept="image/*" />
+                      <span>Change cover</span>
+                    </label>
+                  </div>
+                  <input type="hidden" name="coverUrl" />
+                  <div class="avatar-editor-row">
+                    <div id="settings-avatar-preview" class="avatar xl"></div>
+                    <label class="upload-chip">
+                      <input id="avatar-file" type="file" name="avatarFile" accept="image/*" />
+                      <span>Change photo</span>
+                    </label>
+                  </div>
+                  <input type="hidden" name="avatarUrl" />
+                  <div class="field-grid profile-field-grid">
+                    <label>
+                      Display name
+                      <input type="text" name="displayName" maxlength="32" required />
+                    </label>
+                    <label>
+                      Username
+                      <input type="text" name="username" minlength="3" maxlength="20" required />
+                    </label>
+                  </div>
                   <label>
-                    Display name
-                    <input type="text" name="displayName" maxlength="32" required />
+                    Bio
+                    <textarea name="bio" rows="4" maxlength="180" placeholder="Add a short bio for your profile."></textarea>
                   </label>
-                  <label>
-                    Username
-                    <input type="text" name="username" minlength="3" maxlength="20" required />
-                  </label>
+                  <button class="primary-btn" type="submit">Save changes</button>
+                </form>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="appearance">
+                <div class="section-heading compact">
+                  <div>
+                    <span class="muted-label">Appearance</span>
+                    <h2>Choose your Pixora style</h2>
+                  </div>
                 </div>
-                <label>
-                  Bio
-                  <textarea name="bio" rows="4" maxlength="180" placeholder="Add a short bio for your profile."></textarea>
+                <div id="theme-options" class="theme-options theme-gallery">
+                  <label class="theme-card dark-theme-card"><input type="radio" name="themeMode" value="default-dark" /><span><strong>Default dark</strong><small>Classic night social layout</small></span></label>
+                  <label class="theme-card day-theme-card"><input type="radio" name="themeMode" value="day" /><span><strong>Day mode</strong><small>Clean white cards and soft blue accents</small></span></label>
+                  <label class="theme-card summer-theme-card"><input type="radio" name="themeMode" value="summer" /><span><strong>Summer</strong><small>Warm, bright and sunny</small></span></label>
+                  <label class="theme-card spring-theme-card"><input type="radio" name="themeMode" value="spring" /><span><strong>Spring</strong><small>Fresh green profile style</small></span></label>
+                  <label class="theme-card rainy-theme-card"><input type="radio" name="themeMode" value="rainy" /><span><strong>Rainy</strong><small>Cool glassy blue interface</small></span></label>
+                  <label class="theme-card winter-theme-card"><input type="radio" name="themeMode" value="winter" /><span><strong>Winter</strong><small>Frosted, soft and calm</small></span></label>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="privacy">
+                <div class="section-heading compact">
+                  <div>
+                    <span class="muted-label">Privacy</span>
+                    <h2>Last activity</h2>
+                  </div>
+                </div>
+                <label class="settings-toggle-row">
+                  <span>
+                    <strong>Hide my last activity</strong>
+                    <small>Other users will not see when you were last active.</small>
+                  </span>
+                  <input id="hide-activity-toggle" type="checkbox" />
                 </label>
-                <button class="primary-btn" type="submit">Save changes</button>
-              </form>
-            </section>
+              </section>
 
-            <section class="settings-card glass-card reveal-up">
-              <div class="section-heading compact">
-                <div>
-                  <span class="muted-label">Appearance</span>
-                  <h2>Theme mode</h2>
+              <section class="settings-panel" data-settings-panel="library">
+                <div class="section-heading compact">
+                  <div>
+                    <span class="muted-label">Library</span>
+                    <h2>Saved posts</h2>
+                  </div>
                 </div>
-              </div>
-              <div id="theme-options" class="theme-options">
-                <label><input type="radio" name="themeMode" value="default-dark" /> Default dark</label>
-                <label><input type="radio" name="themeMode" value="day" /> Day mode</label>
-                <label><input type="radio" name="themeMode" value="summer" /> Summer</label>
-                <label><input type="radio" name="themeMode" value="spring" /> Spring</label>
-                <label><input type="radio" name="themeMode" value="rainy" /> Rainy</label>
-                <label><input type="radio" name="themeMode" value="winter" /> Winter</label>
-              </div>
-            </section>
+                <div id="saved-posts-list" class="mini-post-list"></div>
+              </section>
 
-            <section class="settings-card glass-card reveal-up">
-              <div class="section-heading compact">
-                <div>
-                  <span class="muted-label">Privacy</span>
-                  <h2>Last activity</h2>
+              <section class="settings-panel" data-settings-panel="security">
+                <div class="section-heading compact">
+                  <div>
+                    <span class="muted-label">Security</span>
+                    <h2>Password and account</h2>
+                  </div>
                 </div>
-              </div>
-              <label class="settings-toggle-row">
-                <span>Hide my last activity from other users</span>
-                <input id="hide-activity-toggle" type="checkbox" />
-              </label>
-            </section>
-
-            <section class="settings-card glass-card reveal-up">
-              <div class="section-heading compact">
-                <div>
-                  <span class="muted-label">Library</span>
-                  <h2>Saved posts</h2>
+                <form id="password-form" class="settings-form compact-form">
+                  <label>
+                    New password
+                    <input type="password" name="newPassword" minlength="6" autocomplete="new-password" placeholder="Minimum 6 characters" />
+                  </label>
+                  <label>
+                    Confirm password
+                    <input type="password" name="confirmPassword" minlength="6" autocomplete="new-password" placeholder="Re-enter password" />
+                  </label>
+                  <button class="primary-btn" type="submit">Change password</button>
+                </form>
+                <div class="security-note">
+                  <strong>Reset password by email</strong>
+                  <p>Firebase sends a secure reset email to your account. Custom numeric verification codes need a backend or Cloud Function.</p>
+                  <button id="send-reset-email" class="ghost-btn" type="button">Send reset email</button>
                 </div>
-              </div>
-              <div id="saved-posts-list" class="mini-post-list"></div>
-            </section>
+                <div class="danger-zone-inline">
+                  <div>
+                    <strong>Account controls</strong>
+                    <p>Log out of this device or permanently delete your Pixora account.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button id="settings-logout" class="ghost-btn" type="button">Log out</button>
+                    <button id="delete-account" class="ghost-btn danger" type="button">Delete account</button>
+                  </div>
+                </div>
+              </section>
 
-            <section class="settings-card danger-zone glass-card reveal-up">
-              <div>
-                <span class="muted-label">Security</span>
-                <h2>Account controls</h2>
-                <p>Log out of this device or permanently delete your Pixora account.</p>
-              </div>
-              <div class="settings-actions">
-                <button id="settings-logout" class="ghost-btn" type="button">Log out</button>
-                <button id="delete-account" class="ghost-btn danger" type="button">Delete account</button>
-              </div>
-            </section>
-            <footer class="demo-footnote">It is a demo version. This is not a complete version.</footer>
+              <footer class="demo-footnote">It is a demo version. This is not a complete version.</footer>
+            </div>
           </div>
         </section>
       </section>
@@ -314,6 +426,44 @@
           <button class="icon-btn" type="button" data-close-follow>×</button>
         </div>
         <div id="follow-list" class="follow-list"></div>
+      </div>
+    </div>
+
+
+    <div id="media-studio-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Edit media before publishing">
+      <div class="modal-card media-studio-card">
+        <div class="modal-header">
+          <div>
+            <span class="muted-label">Media studio</span>
+            <h3>Edit story or post</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-media-studio>×</button>
+        </div>
+        <div class="media-studio-grid">
+          <section>
+            <h4>Video / Story controls</h4>
+            <p class="soft-note">These controls are saved with the post and help mobile users prepare story-style media before publishing.</p>
+            <label class="settings-toggle-row"><span><strong>Mute video</strong><small>Good for short clips and stories.</small></span><input id="studio-muted" type="checkbox" /></label>
+            <label class="settings-toggle-row"><span><strong>Loop video</strong><small>Replay clips smoothly in the feed.</small></span><input id="studio-loop" type="checkbox" /></label>
+          </section>
+        </div>
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" data-close-media-studio>Done</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="story-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Story viewer">
+      <div class="modal-card story-viewer-card">
+        <div class="modal-header">
+          <div>
+            <span class="muted-label">Story</span>
+            <h3 id="story-viewer-title">Pixora story</h3>
+          </div>
+          <button class="icon-btn" type="button" data-close-story>×</button>
+        </div>
+        <div id="story-viewer-body" class="story-viewer-body"></div>
       </div>
     </div>
 

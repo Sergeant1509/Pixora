@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101014" />
+    <link rel="icon" href="/pixora-favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/pixora-favicon.svg" />
     <title>Sign up — Pixora</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -58,18 +60,19 @@
         <p class="auth-subtitle">Set up your identity and start building your social circle.</p>
 
         <form id="signup-form" class="auth-form active" method="post" action="#">
-          <div class="field-grid">
-            <label>
-              Name
-              <input type="text" name="displayName" autocomplete="name" placeholder="Your name" maxlength="32" required />
-            </label>
-            <label>
-              Username
+          <label>
+            Name
+            <input type="text" name="displayName" autocomplete="name" placeholder="Your name" maxlength="32" required />
+          </label>
+          <label class="username-field">
+            Username
+            <div class="username-input-wrap">
+              <span>@</span>
               <input id="username-input" type="text" name="username" autocomplete="username" placeholder="username" minlength="3" maxlength="20" required />
-              <small id="username-status" class="username-status">Pick a unique username.</small>
-              <div id="username-suggestions" class="username-suggestions" aria-live="polite"></div>
-            </label>
-          </div>
+            </div>
+            <small id="username-status" class="username-status">Pick a unique username.</small>
+            <div id="username-suggestions" class="username-suggestions" aria-live="polite"></div>
+          </label>
           <label>
             Email
             <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />

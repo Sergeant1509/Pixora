@@ -28,7 +28,7 @@ export function listenToPosts(callback) {
   });
 }
 
-export async function createPost(profile, content, media = null) {
+export async function createPost(profile, content, media = null, options = {}) {
   const safeContent = cleanText(content, 800);
   if (!safeContent && !media?.url) throw new Error('Write something or add a photo before publishing.');
 
@@ -42,6 +42,9 @@ export async function createPost(profile, content, media = null) {
     mediaType: media?.type || '',
     mediaPath: media?.path || '',
     imageUrl: media?.type === 'image' ? media.url : '',
+    postKind: options.postKind === 'story' ? 'story' : 'post',
+    videoMuted: Boolean(options.videoMuted),
+    videoLoop: Boolean(options.videoLoop),
     likedBy: [],
     savedBy: [],
     likeCount: 0,
@@ -175,6 +178,9 @@ function normalizePost(post = {}) {
     mediaUrl: post.mediaUrl || post.imageUrl || '',
     mediaType: post.mediaType || (post.imageUrl ? 'image' : ''),
     mediaPath: post.mediaPath || '',
+    postKind: post.postKind || 'post',
+    videoMuted: Boolean(post.videoMuted),
+    videoLoop: Boolean(post.videoLoop),
     likedBy: Array.isArray(post.likedBy) ? post.likedBy.map(String) : [],
     savedBy: Array.isArray(post.savedBy) ? post.savedBy.map(String) : [],
     likeCount: Number(post.likeCount || 0),

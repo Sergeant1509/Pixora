@@ -121,7 +121,7 @@ function conversationPreview(message) {
   if (message.type === 'image') return 'Sent a photo';
   if (message.type === 'gif') return 'Sent a GIF';
   if (message.type === 'post') return 'Shared a post';
-  return message.text ? 'Encrypted message' : 'New message';
+  return message.text ? cleanText(message.text, 80) : 'New message';
 }
 
 function getConversationId(uidA, uidB) {
