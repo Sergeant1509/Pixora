@@ -68,6 +68,27 @@ function setupMediaPerformance(root = document) {
     video.setAttribute('playsinline', '');
     video.setAttribute('controlslist', 'nodownload noplaybackrate');
     video.disablePictureInPicture = true;
+
+    if (video.dataset.pixoraPlayBound !== 'true') {
+      video.dataset.pixoraPlayBound = 'true';
+      video.addEventListener('play', () => {
+        pauseAllVideosExcept(video);
+        setVideoButtonState(video, true);
+
+        const reelCard = video.closest('.video-reel-card');
+        if (reelCard) {
+          const post = getPostFromButton(reelCard);
+          state.reelsAutoplayEnabled = true;
+          state.reelMutedPreference = video.muted;
+          if (post?.id) {
+            state.reelSeenPostIds.add(post.id);
+            saveReelSessionState();
+          }
+        }
+      });
+      video.addEventListener('pause', () => setVideoButtonState(video, false));
+      video.addEventListener('ended', () => setVideoButtonState(video, false));
+    }
   });
 
   observeVideos(root);
@@ -451,6 +472,7 @@ const state = {
   reelsAutoplayEnabled: false,
   reelMutedPreference: false,
   reelScrollRaf: null,
+  reelScrollStopTimer: null,
   unsubscribers: [],
   unsubscribeMessages: null,
   unsubscribeProfileStats: null,
@@ -1829,7 +1851,67 @@ function mediaTemplate(post) {
   return `<img class="post-media" src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" decoding="async" />`;
 }
 
+async function likePostFromElement(element, { forceLike = false, burst = false } = {}) {
+  const post = getPostFromButton(element);
+  if (!post || !state.profile?.uid) return;
+
+  const addingLike = !post.likedBy.includes(state.profile.uid);
+  if (forceLike && !addingLike) {
+    if (burst) showReelLikeBurst(element);
+    return;
+  }
+
+  try {
+    await toggleLike(post, state.profile.uid);
+    if (addingLike) {
+      notifyPostLike(post, state.profile).catch((error) => console.warn('Like notification failed:', error));
+    }
+    if (burst) showReelLikeBurst(element);
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+function showReelLikeBurst(element) {
+  const shell = element?.closest?.('.video-reel-media') || element?.closest?.('[data-video-shell]');
+  if (!shell) return;
+
+  const burst = document.createElement('span');
+  burst.className = 'reel-like-burst';
+  burst.textContent = '♥';
+  shell.appendChild(burst);
+  window.setTimeout(() => burst.remove(), 760);
+}
+
+function bindReelDoubleTapLike(container) {
+  $$('.video-reel-media', container).forEach((shell) => {
+    if (shell.dataset.doubleTapLikeBound === 'true') return;
+    shell.dataset.doubleTapLikeBound = 'true';
+
+    shell.addEventListener('dblclick', async (event) => {
+      if (event.target.closest('button') || event.target.closest('.post-more-wrap') || event.target.closest('[data-comments-panel]')) return;
+      event.preventDefault();
+      await likePostFromElement(shell, { forceLike: true, burst: true });
+    });
+
+    let lastTap = 0;
+    shell.addEventListener('touchend', async (event) => {
+      if (event.target.closest('button') || event.target.closest('.post-more-wrap') || event.target.closest('[data-comments-panel]')) return;
+      const now = Date.now();
+      if (now - lastTap > 0 && now - lastTap < 280) {
+        event.preventDefault();
+        await likePostFromElement(shell, { forceLike: true, burst: true });
+        lastTap = 0;
+        return;
+      }
+      lastTap = now;
+    }, { passive: false });
+  });
+}
+
 function bindPostActions(container) {
+  bindReelDoubleTapLike(container);
+
   $$('[data-open-profile]', container).forEach((button) => {
     button.addEventListener('click', () => openUserProfile(button.dataset.openProfile));
   });
@@ -1927,18 +2009,7 @@ function bindPostActions(container) {
   });
 
   $$('[data-like-post]', container).forEach((button) => {
-    button.addEventListener('click', async () => {
-      const post = getPostFromButton(button);
-      const addingLike = post && !post.likedBy.includes(state.profile.uid);
-      try {
-        await toggleLike(post, state.profile.uid);
-        if (addingLike) {
-          notifyPostLike(post, state.profile).catch((error) => console.warn('Like notification failed:', error));
-        }
-      } catch (error) {
-        showToast(friendlyError(error), 'error');
-      }
-    });
+    button.addEventListener('click', () => likePostFromElement(button));
   });
 
   $$('[data-view-likes]', container).forEach((button) => {
@@ -2810,8 +2881,11 @@ function setupReelViewportPlayback() {
 
   views.videoFeedList.dataset.reelScrollBound = 'true';
   views.videoFeedList.addEventListener('scroll', () => {
+    pauseAllVideosExcept(null, views.videoFeedList);
     window.cancelAnimationFrame(state.reelScrollRaf);
-    state.reelScrollRaf = window.requestAnimationFrame(() => syncActiveReelPlayback({ autoplay: true }));
+    window.clearTimeout(state.reelScrollStopTimer);
+    state.reelScrollRaf = window.requestAnimationFrame(() => syncActiveReelPlayback({ autoplay: false }));
+    state.reelScrollStopTimer = window.setTimeout(() => syncActiveReelPlayback({ autoplay: true }), 110);
   }, { passive: true });
 }
 
