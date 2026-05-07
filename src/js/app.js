@@ -15,7 +15,7 @@ import {
 } from './services/post.service.js';
 import { followUser, getFollowStats, listenToFollowers, listenToFollowing, listenToFollowList, listenToFollowStats, removeFollower, unfollowUser } from './services/social.service.js';
 import { clearConversationForEveryone, deleteMessageForEveryone, listenToConversations, listenToMessages, openConversation, sendMessage } from './services/chat.service.js';
-import { listenToNotifications, markNotificationsRead, notifyCommentLike, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
+import { deleteAllNotifications, deleteNotification, listenToNotifications, markNotificationsRead, notifyCommentLike, notifyCommentMention, notifyPostComment, notifyPostLike } from './services/notification.service.js';
 import { createCallInvite } from './services/call.service.js';
 import { cloudinaryReady, cropImageFileToDataUrl, uploadAvatar, uploadCoverImage, uploadMessageImage, uploadPostMedia } from './services/storage.service.js';
 import { REPORT_GROUPS, banMessage, blockUser, getBanInfo, listenToBlocked, registerContentViolation, scanContent, submitReport } from './services/moderation.service.js';
@@ -35,12 +35,111 @@ const UI_ICON_SVGS = {
   share: '<svg viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg>',
   phone: '<svg viewBox="0 0 24 24"><path d="M8.5 5.5 6.8 3.8A2 2 0 0 0 4 3.8l-1 1C2 5.8 2.3 8.6 4.7 12.2c2.4 3.6 5.5 6.7 9.1 9.1 3.6 2.4 6.4 2.7 7.4 1.7l1-1a2 2 0 0 0 0-2.8l-1.7-1.7a2 2 0 0 0-2.3-.35l-2.2 1.1c-2.8-1.4-5-3.6-6.4-6.4l1.1-2.2a2 2 0 0 0-.35-2.3z"/></svg>',
   video: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="3"/><path d="m15 10 6-3v10l-6-3z"/></svg>',
+  camera: '<svg viewBox="0 0 24 24"><path d="M8.5 6.5 10 4h4l1.5 2.5H19A2.5 2.5 0 0 1 21.5 9v8A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V9A2.5 2.5 0 0 1 5 6.5z"/><circle cx="12" cy="13" r="3.2"/></svg>',
+  arrowLeft: '<svg viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"/><path d="M10 12h11"/></svg>',
   more: '<svg viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.8 1.8 0 0 0 .35 2l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05a1.8 1.8 0 0 0-2-.35 1.8 1.8 0 0 0-1.1 1.65V21a2 2 0 0 1-4 0v-.08a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-2 .35l-.05.05a2 2 0 0 1-2.83-2.83l.05-.05a1.8 1.8 0 0 0 .35-2 1.8 1.8 0 0 0-1.65-1.1H2.5a2 2 0 0 1 0-4h.08a1.8 1.8 0 0 0 1.65-1.1 1.8 1.8 0 0 0-.35-2l-.05-.05a2 2 0 0 1 2.83-2.83l.05.05a1.8 1.8 0 0 0 2 .35 1.8 1.8 0 0 0 1.1-1.65V2.5a2 2 0 0 1 4 0v.08a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.35l.05-.05a2 2 0 0 1 2.83 2.83l-.05.05a1.8 1.8 0 0 0-.35 2 1.8 1.8 0 0 0 1.65 1.1h.08a2 2 0 0 1 0 4h-.08A1.8 1.8 0 0 0 19.4 15z"/></svg>'
 };
 
 function uiIcon(name, extraClass = '') {
   return `<span class="ui-icon ${extraClass}" aria-hidden="true">${UI_ICON_SVGS[name] || ''}</span>`;
+}
+
+function debounce(fn, delay = 180) {
+  let timer = null;
+  return (...args) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), delay);
+  };
+}
+
+function setupMediaPerformance(root = document) {
+  if (!root?.querySelectorAll) return;
+
+  $$('img', root).forEach((image) => {
+    if (!image.hasAttribute('loading')) image.loading = 'lazy';
+    if (!image.hasAttribute('decoding')) image.decoding = 'async';
+    image.draggable = false;
+  });
+
+  $$('video', root).forEach((video) => {
+    video.preload = video.getAttribute('preload') || 'metadata';
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('controlslist', 'nodownload noplaybackrate');
+    video.disablePictureInPicture = true;
+  });
+
+  observeVideos(root);
+}
+
+function observeVideos(root = document) {
+  if (!('IntersectionObserver' in window) || !root?.querySelectorAll) return;
+
+  if (!state.videoObserver) {
+    state.videoObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const video = entry.target;
+        if (!video) return;
+
+        const activeView = video.closest('.view.active');
+        const reelCard = video.closest('.video-reel-card');
+
+        if (reelCard) {
+          const isActiveReel = Boolean(activeView && entry.isIntersecting && entry.intersectionRatio >= 0.72 && !document.hidden);
+          reelCard.classList.toggle('is-active-reel', isActiveReel);
+
+          if (!isActiveReel) {
+            pauseVideoElement(video);
+            return;
+          }
+
+          pauseAllVideosExcept(video, views.videoFeedList || document);
+          if (state.reelsAutoplayEnabled && video.paused) {
+            video.muted = state.reelMutedPreference;
+            video.play()
+              .then(() => setVideoButtonState(video, true))
+              .catch(() => setVideoButtonState(video, false));
+          }
+          return;
+        }
+
+        if (!video.paused && (!activeView || !entry.isIntersecting || entry.intersectionRatio < 0.22 || document.hidden)) {
+          pauseVideoElement(video);
+        }
+      });
+    }, { threshold: [0, 0.22, 0.5, 0.72, 0.9, 1] });
+  }
+
+  $$('video', root).forEach((video) => {
+    if (video.dataset.pixoraObserved === 'true') return;
+    video.dataset.pixoraObserved = 'true';
+    state.videoObserver.observe(video);
+  });
+}
+
+function setVideoButtonState(video, playing = false) {
+  const playButton = video?.closest('[data-video-shell]')?.querySelector('[data-video-toggle]');
+  if (playButton) playButton.textContent = playing ? 'Ⅱ' : '▶';
+}
+
+function pauseVideoElement(video) {
+  if (!video || video.paused) return;
+  video.pause();
+  setVideoButtonState(video, false);
+}
+
+function pauseAllVideosExcept(currentVideo = null, root = document) {
+  if (!root?.querySelectorAll) return;
+  $$('video', root).forEach((video) => {
+    if (video !== currentVideo) pauseVideoElement(video);
+  });
+}
+
+function pauseBackgroundVideos() {
+  $$('video').forEach((video) => {
+    if (!video.closest('.view.active')) pauseVideoElement(video);
+  });
 }
 
 function cleanInput(value = '', maxLength = 80) {
@@ -71,6 +170,102 @@ function saveFeedSuggestionPreference(value) {
   const key = getFeedSkipKey();
   state.feedSuggestionsSkipped = Boolean(value);
   if (key) localStorage.setItem(key, String(Boolean(value)));
+}
+
+function getContentPreferenceKey() {
+  return state.profile?.uid ? `pixora-content-preferences:${state.profile.uid}` : '';
+}
+
+function createEmptyContentPreferences() {
+  return {
+    suggestedPosts: new Set(),
+    hiddenPosts: new Set(),
+    suggestedAuthors: new Set(),
+    hiddenAuthors: new Set()
+  };
+}
+
+function normalizeContentPreferences(raw = {}) {
+  const next = createEmptyContentPreferences();
+  ['suggestedPosts', 'hiddenPosts', 'suggestedAuthors', 'hiddenAuthors'].forEach((key) => {
+    const value = raw?.[key];
+    next[key] = new Set(Array.isArray(value) ? value.filter(Boolean).slice(-250) : []);
+  });
+  return next;
+}
+
+function loadContentPreferences() {
+  const uid = state.profile?.uid || '';
+  if (state.contentPreferencesLoadedFor === uid) return;
+
+  state.contentPreferencesLoadedFor = uid;
+  state.contentPreferences = createEmptyContentPreferences();
+  if (!uid) return;
+
+  const saved = safeParseJson(localStorage.getItem(getContentPreferenceKey()), null);
+  state.contentPreferences = normalizeContentPreferences(saved || {});
+}
+
+function saveContentPreferences() {
+  const key = getContentPreferenceKey();
+  if (!key) return;
+
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      suggestedPosts: [...state.contentPreferences.suggestedPosts].slice(-250),
+      hiddenPosts: [...state.contentPreferences.hiddenPosts].slice(-250),
+      suggestedAuthors: [...state.contentPreferences.suggestedAuthors].slice(-250),
+      hiddenAuthors: [...state.contentPreferences.hiddenAuthors].slice(-250)
+    }));
+  } catch (error) {
+    console.warn('Could not save content preferences:', error);
+  }
+}
+
+function getContentPreferenceScore(post = {}) {
+  const prefs = state.contentPreferences || createEmptyContentPreferences();
+  let score = 0;
+
+  if (prefs.suggestedPosts?.has(post.id)) score += 12;
+  if (prefs.suggestedAuthors?.has(post.authorId)) score += 3.5;
+  if (prefs.hiddenAuthors?.has(post.authorId)) score -= 16;
+  if (prefs.hiddenPosts?.has(post.id)) score -= 1000;
+
+  return score;
+}
+
+function isContentHiddenByPreference(post = {}) {
+  return Boolean(state.contentPreferences?.hiddenPosts?.has(post.id));
+}
+
+function markContentPreference(post, preference = 'suggest') {
+  if (!post?.id) return;
+  loadContentPreferences();
+
+  if (preference === 'hide') {
+    state.contentPreferences.hiddenPosts.add(post.id);
+    state.contentPreferences.suggestedPosts.delete(post.id);
+    if (post.authorId && post.authorId !== state.profile?.uid) {
+      state.contentPreferences.hiddenAuthors.add(post.authorId);
+      state.contentPreferences.suggestedAuthors.delete(post.authorId);
+    }
+    showToast('Thanks. We will suggest less content like this.');
+  } else {
+    state.contentPreferences.suggestedPosts.add(post.id);
+    state.contentPreferences.hiddenPosts.delete(post.id);
+    if (post.authorId) {
+      state.contentPreferences.suggestedAuthors.add(post.authorId);
+      state.contentPreferences.hiddenAuthors.delete(post.authorId);
+    }
+    showToast('Got it. We will suggest more content like this.');
+  }
+
+  saveContentPreferences();
+  state.reelOrder = [];
+  state.reelOrderSignature = '';
+  saveReelSessionState();
+  renderPosts();
+  renderVideoFeed();
 }
 
 function shouldShowFeedIntro() {
@@ -174,7 +369,9 @@ function sortFeedPosts(posts = []) {
   return [...posts].sort((a, b) => {
     const aOwnBoost = a.authorId === state.profile?.uid ? 18 : 0;
     const bOwnBoost = b.authorId === state.profile?.uid ? 18 : 0;
-    const scoreDiff = (getViralScore(b) + bOwnBoost) - (getViralScore(a) + aOwnBoost);
+    const aPreferenceBoost = getContentPreferenceScore(a);
+    const bPreferenceBoost = getContentPreferenceScore(b);
+    const scoreDiff = (getViralScore(b) + bOwnBoost + bPreferenceBoost) - (getViralScore(a) + aOwnBoost + aPreferenceBoost);
     if (Math.abs(scoreDiff) > 1.5) return scoreDiff;
 
     const aCreated = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
@@ -186,7 +383,8 @@ function sortFeedPosts(posts = []) {
 function getPersonalizedFeedPosts() {
   if (!state.profile) return { posts: [], ownPosts: [], followedPosts: [] };
 
-  const cleanPosts = state.posts.filter((post) => post.authorId && post.postKind !== 'story' && !state.blocked.has(post.authorId));
+  loadContentPreferences();
+  const cleanPosts = state.posts.filter((post) => post.authorId && post.postKind !== 'story' && !state.blocked.has(post.authorId) && !isContentHiddenByPreference(post));
   const ownPosts = cleanPosts.filter((post) => post.authorId === state.profile.uid);
   const followedPosts = cleanPosts.filter((post) => state.following.has(post.authorId));
 
@@ -229,6 +427,8 @@ const state = {
   feedSuggestionsSkipped: false,
   feedIntroTimer: null,
   feedIntroScrollHandler: null,
+  contentPreferences: createEmptyContentPreferences(),
+  contentPreferencesLoadedFor: '',
   conversations: [],
   notifications: [],
   blocked: new Set(),
@@ -248,12 +448,18 @@ const state = {
   reelOrderSignature: '',
   reelOrderLoadedFor: '',
   reelSeenPostIds: new Set(),
+  reelsAutoplayEnabled: false,
+  reelMutedPreference: false,
+  reelScrollRaf: null,
   unsubscribers: [],
   unsubscribeMessages: null,
   unsubscribeProfileStats: null,
   unsubscribeFollowList: null,
   linkScrolled: false,
   currentTheme: localStorage.getItem('pixora-theme') || 'day',
+  videoObserver: null,
+  conversationQuery: '',
+  conversationFilter: 'primary',
   activityTimer: null
 };
 
@@ -267,6 +473,7 @@ const views = {
   postMediaInput: $('#post-media'),
   mediaPreview: $('#media-preview'),
   postsList: $('#posts-list'),
+  createStoryBtn: $('#create-story-btn'),
   storiesTray: $('#stories-tray'),
   rightRail: $('#right-rail'),
   videoFeedList: $('#video-feed-list'),
@@ -274,6 +481,11 @@ const views = {
   peopleList: $('#people-list'),
   peopleSearch: $('#people-search'),
   conversationList: $('#conversation-list'),
+  conversationSearch: $('#conversation-search'),
+  dmAccountName: $('#dm-account-name'),
+  dmAccountPill: $('#dm-account-pill'),
+  dmPrimaryCount: $('#dm-primary-count'),
+  dmRequestsCount: $('#dm-requests-count'),
   notificationsList: $('#notifications-list'),
   notificationBadge: $('#notification-badge'),
   topbarNotificationsBtn: $('#topbar-notifications-btn'),
@@ -281,6 +493,7 @@ const views = {
   homeNotificationsBtn: $('#home-notifications-btn'),
   homeNotificationBadge: $('#home-notification-badge'),
   markNotificationsRead: $('#mark-notifications-read'),
+  deleteNotifications: $('#delete-notifications'),
   chatEmpty: $('#chat-empty'),
   chatActive: $('#chat-active'),
   chatHeader: $('#chat-header'),
@@ -396,7 +609,22 @@ function bindStaticEvents() {
   });
 
   views.postMediaInput?.addEventListener('change', renderSelectedMediaPreview);
-  views.peopleSearch?.addEventListener('input', renderPeople);
+  views.peopleSearch?.addEventListener('input', debounce(renderPeople, 160));
+  views.conversationSearch?.addEventListener('input', debounce((event) => {
+    state.conversationQuery = event.target.value || '';
+    renderConversations();
+  }, 140));
+  views.dmAccountPill?.addEventListener('click', () => openUserProfile(state.profile?.uid));
+  $('[data-dm-compose]')?.addEventListener('click', () => switchView('discover'));
+  $('[data-dm-open-explore]')?.addEventListener('click', () => switchView('discover'));
+  $('[data-dm-filter-toggle]')?.addEventListener('click', () => views.conversationSearch?.focus());
+  $$('[data-dm-filter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.conversationFilter = button.dataset.dmFilter || 'primary';
+      $$('[data-dm-filter]').forEach((item) => item.classList.toggle('active', item === button));
+      renderConversations();
+    });
+  });
   views.avatarFile?.addEventListener('change', openCropperForAvatar);
   views.coverFile?.addEventListener('change', handleCoverSelect);
   views.cropZoom?.addEventListener('input', updateCropPreview);
@@ -409,8 +637,10 @@ function bindStaticEvents() {
   $$('[data-close-follow]').forEach((button) => button.addEventListener('click', closeFollowModal));
   views.copyPostLink?.addEventListener('click', copyShareLink);
   views.markNotificationsRead?.addEventListener('click', handleMarkNotificationsRead);
+  views.deleteNotifications?.addEventListener('click', handleDeleteAllNotifications);
   $$('[data-close-likes]').forEach((button) => button.addEventListener('click', closeLikesModal));
   $$('[data-close-story]').forEach((button) => button.addEventListener('click', closeStoryViewer));
+  document.addEventListener('visibilitychange', pauseBackgroundVideos);
 
   $('#emoji-toggle')?.addEventListener('click', () => toggleChatTools('emoji'));
   $('#gif-toggle')?.addEventListener('click', () => toggleChatTools('gif'));
@@ -428,7 +658,7 @@ function bindStaticEvents() {
 function switchView(target) {
   const labels = {
     feed: ['Welcome back', 'Feed'],
-    video: ['Watch', 'Video feed'],
+    video: ['Reels', 'For you'],
     discover: ['Explore', 'Search'],
     messages: ['Inbox', 'Messages'],
     create: ['Create', 'Post or story'],
@@ -441,10 +671,12 @@ function switchView(target) {
   $$('.view').forEach((view) => view.classList.toggle('active', view.dataset.view === target));
   views.topbarKicker.textContent = labels[target]?.[0] || 'Pixora';
   views.topbarTitle.textContent = labels[target]?.[1] || 'Pixora';
+  pauseBackgroundVideos();
 
   if (target === 'settings') renderSettingsPanel();
   if (target === 'discover') renderPeople();
   if (target === 'video') renderVideoFeed();
+  if (target === 'messages') renderConversations();
   if (target === 'notifications') {
     renderNotifications();
     handleMarkNotificationsRead({ silent: true });
@@ -606,6 +838,7 @@ function attachRealtimeListeners(uid) {
 
       state.profile = profile;
       loadFeedSuggestionPreference();
+      loadContentPreferences();
       state.profileCache.set(profile.uid, profile);
       if (!state.viewingProfileUid) state.viewingProfileUid = profile.uid;
       renderCurrentUser();
@@ -708,6 +941,8 @@ function cleanupRealtimeListeners() {
   state.openComments.clear();
   state.profile = null;
   state.users = [];
+  state.contentPreferences = createEmptyContentPreferences();
+  state.contentPreferencesLoadedFor = '';
   state.profileCache.clear();
   state.posts = [];
   state.following = new Set();
@@ -731,6 +966,10 @@ function cleanupRealtimeListeners() {
   state.followModal = { uid: '', type: 'followers', user: null, items: [] };
   if (state.activityTimer) clearInterval(state.activityTimer);
   state.activityTimer = null;
+  if (state.videoObserver) {
+    state.videoObserver.disconnect();
+    state.videoObserver = null;
+  }
 }
 
 function showApp() {
@@ -851,7 +1090,7 @@ function closeMediaStudio() {
 function renderStoriesTray() {
   if (!views.storiesTray || !state.profile) return;
   const storyPosts = state.posts
-    .filter((post) => post.postKind === 'story' && post.authorId && !state.blocked.has(post.authorId))
+    .filter((post) => post.postKind === 'story' && post.authorId && post.authorId !== state.profile.uid && !state.blocked.has(post.authorId))
     .sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
 
   const stories = storyPosts.slice(0, 18);
@@ -917,7 +1156,7 @@ function renderActiveStory() {
   const media = story.mediaUrl
     ? (story.mediaType === 'video'
       ? `<div class="video-shell story-video"><video src="${escapeHTML(story.mediaUrl)}" playsinline autoplay muted loop preload="metadata" controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video></div>`
-      : `<img src="${escapeHTML(story.mediaUrl)}" alt="Story media" />`)
+      : `<img src="${escapeHTML(story.mediaUrl)}" alt="Story media" loading="lazy" decoding="async" />`)
     : '';
   views.storyViewerBody.innerHTML = `
     <div class="story-progress-row">
@@ -1001,6 +1240,16 @@ function renderCurrentUser() {
     </div>
   `;
 
+  if (views.createStoryBtn) {
+    views.createStoryBtn.innerHTML = `
+      <span class="story-ring story-profile-ring">
+        ${avatarTemplate(state.profile)}
+        <span class="story-plus-badge">＋</span>
+      </span>
+      <small>Your story</small>
+    `;
+  }
+
   const profileNavIcon = document.querySelector('.nav-profile .nav-icon');
   if (profileNavIcon) {
     profileNavIcon.classList.add('profile-nav-avatar-slot');
@@ -1008,6 +1257,7 @@ function renderCurrentUser() {
   }
 
   renderAvatarInto(views.composerAvatar, state.profile);
+  if (views.dmAccountName) views.dmAccountName.textContent = state.profile.username || state.profile.displayName || 'Pixora';
 }
 
 function renderSettingsPanel() {
@@ -1420,6 +1670,7 @@ function renderPostsInto(container, posts, options = {}) {
   bindPostActions(container);
   bindMiniFollowSuggestions(container);
   bindFeedIntroDismissal(container);
+  setupMediaPerformance(container);
 
   state.openComments.forEach((postId) => {
     if (container.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) {
@@ -1494,6 +1745,26 @@ function getLivePostAuthor(post = {}) {
   };
 }
 
+function postMoreMenuTemplate(post, { canDelete = false, reel = false } = {}) {
+  const isOwnPost = post?.authorId === state.profile?.uid;
+  const wrapClass = reel ? 'post-more-wrap reel-more' : 'post-more-wrap';
+  const buttonClass = reel ? 'reel-action' : 'icon-btn post-more-btn';
+  const buttonTitle = reel ? 'More' : 'Post options';
+
+  return `
+    <div class="${wrapClass}">
+      <button class="${buttonClass}" type="button" data-post-menu-toggle title="${buttonTitle}" aria-label="${buttonTitle}">${uiIcon('more')}</button>
+      <div class="post-more-menu ${reel ? 'reel-more-menu' : ''}">
+        ${canDelete ? '<button class="danger" type="button" data-delete-post>Delete post</button><span class="menu-separator"></span>' : ''}
+        ${!isOwnPost ? '<button type="button" data-report-post>Report this post</button>' : ''}
+        ${!isOwnPost ? '<button type="button" data-report-post-user>Report user</button>' : ''}
+        <button class="positive" type="button" data-suggest-content>Suggest this content</button>
+        <button type="button" data-hide-content>Do not suggest me this content</button>
+      </div>
+    </div>
+  `;
+}
+
 function postTemplate(post) {
   const uid = state.profile?.uid;
   const author = getLivePostAuthor(post);
@@ -1517,13 +1788,7 @@ function postTemplate(post) {
             <span>@${escapeHTML(author.username || 'user')} · ${escapeHTML(timeAgo(post.createdAt))}</span>
           </div>
         </button>
-        ${canDelete ? `
-          <div class="post-more-wrap">
-            <button class="icon-btn post-more-btn" type="button" data-post-menu-toggle title="Post options" aria-label="Post options">${uiIcon('more')}</button>
-            <div class="post-more-menu">
-              <button class="danger" type="button" data-delete-post>Delete post</button>
-            </div>
-          </div>` : ''}
+        ${postMoreMenuTemplate(post, { canDelete, reel: false })}
       </header>
       ${post.content ? `<p class="post-content">${escapeHTML(post.content)}</p>` : ''}
       ${media}
@@ -1561,7 +1826,7 @@ function mediaTemplate(post) {
       <button class="video-mute-btn" type="button" data-video-mute>${post.videoMuted ? '🔇' : '🔊'}</button>
     </div>`;
   }
-  return `<img class="post-media" src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`;
+  return `<img class="post-media" src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" decoding="async" />`;
 }
 
 function bindPostActions(container) {
@@ -1575,15 +1840,20 @@ function bindPostActions(container) {
       if (!video) return;
       if (video.paused) {
         const post = getPostFromButton(button);
-        if (post?.mediaType === 'video') {
+        const reelCard = button.closest('.video-reel-card');
+        pauseAllVideosExcept(video);
+        if (reelCard && post?.mediaType === 'video') {
+          state.reelsAutoplayEnabled = true;
+          state.reelMutedPreference = video.muted;
           state.reelSeenPostIds.add(post.id);
           saveReelSessionState();
         }
-        video.play().catch(() => {});
-        button.textContent = 'Ⅱ';
+        video.play()
+          .then(() => setVideoButtonState(video, true))
+          .catch(() => setVideoButtonState(video, false));
       } else {
-        video.pause();
-        button.textContent = '▶';
+        if (button.closest('.video-reel-card')) state.reelsAutoplayEnabled = false;
+        pauseVideoElement(video);
       }
     });
   });
@@ -1593,6 +1863,7 @@ function bindPostActions(container) {
       const video = button.closest('[data-video-shell]')?.querySelector('video');
       if (!video) return;
       video.muted = !video.muted;
+      if (button.closest('.video-reel-card')) state.reelMutedPreference = video.muted;
       button.textContent = video.muted ? '🔇' : '🔊';
     });
   });
@@ -1622,6 +1893,36 @@ function bindPostActions(container) {
       } catch (error) {
         showToast(friendlyError(error), 'error');
       }
+    });
+  });
+
+  $$('[data-report-post]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const post = getPostFromButton(button);
+      const targetUser = getLivePostAuthor(post || {});
+      openReportFlow({ targetUser, post, targetType: 'post' });
+    });
+  });
+
+  $$('[data-report-post-user]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const post = getPostFromButton(button);
+      const targetUser = getLivePostAuthor(post || {});
+      openReportFlow({ targetUser, post, targetType: 'user' });
+    });
+  });
+
+  $$('[data-suggest-content]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const post = getPostFromButton(button);
+      if (post) markContentPreference(post, 'suggest');
+    });
+  });
+
+  $$('[data-hide-content]', container).forEach((button) => {
+    button.addEventListener('click', () => {
+      const post = getPostFromButton(button);
+      if (post) markContentPreference(post, 'hide');
     });
   });
 
@@ -2029,7 +2330,8 @@ async function openReportFlow({ targetUser, targetComment = null, post = null, t
       targetComment,
       post,
       group,
-      details
+      details,
+      targetType
     });
 
     state.commentMenu = { postId: '', commentId: '' };
@@ -2134,6 +2436,39 @@ async function handleMarkNotificationsRead(options = {}) {
   }
 }
 
+async function handleDeleteNotification(notificationId) {
+  if (!state.profile?.uid || !notificationId) return;
+
+  try {
+    await deleteNotification(state.profile.uid, notificationId);
+    showToast('Notification deleted.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  }
+}
+
+async function handleDeleteAllNotifications() {
+  if (!state.profile?.uid) return;
+
+  if (!state.notifications.length) {
+    showToast('No notifications to delete.');
+    return;
+  }
+
+  const confirmed = window.confirm('Delete all notifications? This cannot be undone.');
+  if (!confirmed) return;
+
+  setButtonLoading(views.deleteNotifications, true, 'Deleting...');
+  try {
+    const deletedCount = await deleteAllNotifications(state.profile.uid);
+    showToast(deletedCount ? 'Notifications deleted.' : 'No notifications to delete.');
+  } catch (error) {
+    showToast(friendlyError(error), 'error');
+  } finally {
+    setButtonLoading(views.deleteNotifications, false);
+  }
+}
+
 function renderNotifications() {
   if (!views.notificationsList) return;
 
@@ -2150,6 +2485,13 @@ function renderNotifications() {
 
   $$('[data-notification-profile]', views.notificationsList).forEach((button) => {
     button.addEventListener('click', () => openUserProfile(button.dataset.notificationProfile));
+  });
+
+  $$('[data-delete-notification]', views.notificationsList).forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleDeleteNotification(button.dataset.deleteNotification);
+    });
   });
 }
 
@@ -2195,6 +2537,9 @@ function notificationTemplate(notification) {
         <strong>${escapeHTML(title)}</strong>
         <span>${escapeHTML(body)}</span>
         <small>${escapeHTML(timeAgo(notification.updatedAt))}</small>
+      </button>
+      <button class="notification-delete-btn" type="button" data-delete-notification="${escapeHTML(notification.id)}" title="Delete notification" aria-label="Delete notification">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>
       </button>
     </article>
   `;
@@ -2360,6 +2705,7 @@ function getReelAlgorithmScore(post = {}) {
   const velocity = engagement / Math.pow(ageHours + 2, 0.72);
   const followedBoost = state.following.has(post.authorId) ? 2.2 : 0;
   const myLikeBoost = Array.isArray(post.likedBy) && post.likedBy.includes(state.profile?.uid) ? 1.4 : 0;
+  const preferenceBoost = getContentPreferenceScore(post);
   const seenPenalty = state.reelSeenPostIds.has(post.id) ? 7 : 0;
   const ownPenalty = post.authorId === state.profile?.uid ? 1.2 : 0;
   const stableDiscoveryNoise = (getStableHash(`${state.profile?.uid || 'guest'}:${post.id}`) % 1000) / 1000;
@@ -2369,6 +2715,7 @@ function getReelAlgorithmScore(post = {}) {
     + (freshness * 14)
     + followedBoost
     + myLikeBoost
+    + preferenceBoost
     + stableDiscoveryNoise
     - seenPenalty
     - ownPenalty
@@ -2412,19 +2759,84 @@ function buildDiversifiedReelOrder(posts = [], lockedIds = []) {
   return order;
 }
 
+function getMostVisibleReelVideo() {
+  if (!views.videoFeedList?.querySelectorAll) return null;
+
+  const viewportRect = views.videoFeedList.getBoundingClientRect();
+  let best = { video: null, card: null, ratio: 0 };
+
+  $$('.video-reel-card', views.videoFeedList).forEach((card) => {
+    const rect = card.getBoundingClientRect();
+    const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportRect.bottom) - Math.max(rect.top, viewportRect.top));
+    const ratio = visibleHeight / Math.max(rect.height, 1);
+    if (ratio > best.ratio) {
+      best = { video: $('video', card), card, ratio };
+    }
+  });
+
+  return best.ratio >= 0.58 ? best : null;
+}
+
+function syncActiveReelPlayback({ autoplay = false } = {}) {
+  if (!views.videoFeedList || !$('#video-view')?.classList.contains('active')) return;
+
+  const active = getMostVisibleReelVideo();
+  if (!active?.video) {
+    pauseAllVideosExcept(null, views.videoFeedList);
+    return;
+  }
+
+  $$('.video-reel-card', views.videoFeedList).forEach((card) => {
+    card.classList.toggle('is-active-reel', card === active.card);
+  });
+
+  pauseAllVideosExcept(active.video, views.videoFeedList);
+
+  if (autoplay && state.reelsAutoplayEnabled && active.video.paused) {
+    const post = getPostFromButton(active.card);
+    active.video.muted = state.reelMutedPreference;
+    if (post?.id) {
+      state.reelSeenPostIds.add(post.id);
+      saveReelSessionState();
+    }
+    active.video.play()
+      .then(() => setVideoButtonState(active.video, true))
+      .catch(() => setVideoButtonState(active.video, false));
+  }
+}
+
+function setupReelViewportPlayback() {
+  if (!views.videoFeedList || views.videoFeedList.dataset.reelScrollBound === 'true') return;
+
+  views.videoFeedList.dataset.reelScrollBound = 'true';
+  views.videoFeedList.addEventListener('scroll', () => {
+    window.cancelAnimationFrame(state.reelScrollRaf);
+    state.reelScrollRaf = window.requestAnimationFrame(() => syncActiveReelPlayback({ autoplay: true }));
+  }, { passive: true });
+}
+
 function getVideoPoolSignature(videos = []) {
+  const prefs = state.contentPreferences || createEmptyContentPreferences();
+  const preferenceSignature = [
+    ...prefs.suggestedPosts,
+    ...prefs.hiddenPosts,
+    ...prefs.suggestedAuthors,
+    ...prefs.hiddenAuthors
+  ].sort().join(',');
+
   return videos
-    .map((post) => `${post.id}:${post.authorId || ''}`)
+    .map((post) => `${post.id}:${post.authorId || ''}:${getContentPreferenceScore(post)}`)
     .sort()
-    .join('|');
+    .join('|') + `::prefs:${preferenceSignature}`;
 }
 
 function getAlgorithmicVideoPosts() {
   ensureReelSessionState();
 
+  loadContentPreferences();
   const videos = state.posts
     .filter((post) => post.mediaType === 'video' && post.mediaUrl && post.postKind !== 'story')
-    .filter((post) => post.authorId && !state.blocked.has(post.authorId));
+    .filter((post) => post.authorId && !state.blocked.has(post.authorId) && !isContentHiddenByPreference(post));
 
   const byId = new Map(videos.map((post) => [post.id, post]));
   const signature = getVideoPoolSignature(videos);
@@ -2464,12 +2876,17 @@ function renderVideoFeed() {
   const orderKey = videos.map((post) => post.id).join('|');
   if (views.videoFeedList.dataset.reelOrder === orderKey && views.videoFeedList.children.length) {
     refreshRenderedReelCards(videos);
+    setupReelViewportPlayback();
+    requestAnimationFrame(() => syncActiveReelPlayback({ autoplay: false }));
     return;
   }
 
   views.videoFeedList.dataset.reelOrder = orderKey;
   views.videoFeedList.innerHTML = videos.map((post) => videoReelTemplate(post)).join('');
   bindPostActions(views.videoFeedList);
+  setupMediaPerformance(views.videoFeedList);
+  setupReelViewportPlayback();
+  requestAnimationFrame(() => syncActiveReelPlayback({ autoplay: false }));
 
   state.openComments.forEach((postId) => {
     if (views.videoFeedList.querySelector(`[data-post-id="${cssEscape(postId)}"]`)) {
@@ -2524,7 +2941,7 @@ function videoReelTemplate(post) {
       <div class="video-reel-media" data-video-shell>
         <video src="${escapeHTML(post.mediaUrl)}" playsinline preload="metadata" loop controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video>
         <button class="video-play-btn" type="button" data-video-toggle aria-label="Play video">▶</button>
-        <button class="video-mute-btn" type="button" data-video-mute aria-label="Mute video">🔇</button>
+        <button class="video-mute-btn" type="button" data-video-mute aria-label="Mute video">🔊</button>
       </div>
       <div class="video-reel-caption">
         <button class="post-author as-button" type="button" data-open-profile="${escapeHTML(post.authorId)}">
@@ -2541,7 +2958,7 @@ function videoReelTemplate(post) {
         <button class="reel-action" type="button" data-toggle-reel-comments title="Comments">${uiIcon('comment')}<span>${formatCount(post.commentCount)}</span></button>
         <button class="reel-action ${saved ? 'active' : ''}" type="button" data-save-post title="Save">${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')}<span>${saved ? 'Saved' : 'Save'}</span></button>
         <button class="reel-action" type="button" data-share-post title="Share">${uiIcon('share')}<span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
-        ${canDelete ? `<div class="post-more-wrap reel-more"><button class="reel-action" type="button" data-post-menu-toggle title="More">${uiIcon('more')}</button><div class="post-more-menu"><button class="danger" type="button" data-delete-post>Delete post</button></div></div>` : ''}
+        ${postMoreMenuTemplate(post, { canDelete, reel: true })}
       </aside>
       <section class="comments-panel video-reel-comments ${commentsOpen ? 'open' : ''}" data-comments-panel>
         <div class="reel-comments-header">
@@ -2609,7 +3026,7 @@ function renderPeople() {
           const author = getLivePostAuthor(post);
           const media = post.mediaType === 'video'
             ? `<video src="${escapeHTML(post.mediaUrl)}" muted playsinline preload="metadata" oncontextmenu="return false"></video><span class="tile-type-badge">▶</span>`
-            : `<img src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" />`;
+            : `<img src="${escapeHTML(post.mediaUrl)}" alt="Post media" loading="lazy" decoding="async" />`;
 
           return `
             <button class="discover-post-tile" type="button" data-discover-post="${escapeHTML(post.id)}" data-discover-author="${escapeHTML(post.authorId)}">
@@ -2626,6 +3043,7 @@ function renderPeople() {
   ` : '';
 
   views.peopleList.innerHTML = `${userResults}${grid}`;
+  setupMediaPerformance(views.peopleList);
 
   $$('[data-explore-user]', views.peopleList).forEach((button) => button.addEventListener('click', () => openUserProfile(button.dataset.exploreUser)));
   $$('[data-explore-follow]', views.peopleList).forEach((button) => {
@@ -2644,40 +3062,143 @@ function conversationPreviewText(conversation = {}) {
   const preview = String(conversation.lastMessage || '').trim();
   if (!preview) return 'No messages yet';
   if (preview.toLowerCase().includes('encrypted message')) return 'Open chat to view the latest message';
-  return preview.length > 54 ? `${preview.slice(0, 54)}...` : preview;
+  return preview.length > 64 ? `${preview.slice(0, 64)}...` : preview;
+}
+
+function compactTimeAgo(value) {
+  const date = value?.toDate ? value.toDate() : new Date(value || Date.now());
+  const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return 'now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+function getRealConversations() {
+  return state.conversations.filter((conversation) => {
+    const other = getOtherMember(conversation);
+    return Boolean(conversation.lastMessage) && other?.uid && !state.blocked.has(other.uid);
+  });
+}
+
+function conversationInboxBucket(conversation) {
+  const other = getOtherMember(conversation);
+  if (!other?.uid || !state.profile?.uid) return 'primary';
+
+  const isConnected = state.following.has(other.uid) || state.followers.has(other.uid);
+  const isIncomingUnknown = !isConnected && conversation.lastSenderId && conversation.lastSenderId !== state.profile.uid;
+
+  return isIncomingUnknown ? 'requests' : 'primary';
+}
+
+function filterConversationsForInbox(conversations) {
+  const queryText = cleanInput(state.conversationQuery, 80).toLowerCase();
+  const selectedFilter = ['primary', 'requests'].includes(state.conversationFilter) ? state.conversationFilter : 'primary';
+
+  return conversations.filter((conversation) => {
+    if (conversationInboxBucket(conversation) !== selectedFilter) return false;
+    if (!queryText) return true;
+
+    const other = getOtherMember(conversation);
+    const haystack = [
+      other.displayName,
+      other.username,
+      conversationPreviewText(conversation)
+    ].join(' ').toLowerCase();
+
+    return haystack.includes(queryText);
+  });
 }
 
 function renderConversations() {
-  if (!state.profile) return;
+  if (!state.profile || !views.conversationList) return;
 
-  const realConversations = state.conversations.filter((conversation) => {
-    const other = getOtherMember(conversation);
-    return Boolean(conversation.lastMessage) && !state.blocked.has(other.uid);
-  });
-  if (!realConversations.length) {
-    views.conversationList.innerHTML = '<div class="empty-state"><strong>No chats</strong><span>Only conversations with real messages appear here.</span></div>';
+  if (views.dmAccountName) views.dmAccountName.textContent = state.profile.username || state.profile.displayName || 'Pixora';
+
+  const realConversations = getRealConversations();
+  const primaryCount = realConversations.filter((conversation) => conversationInboxBucket(conversation) === 'primary').length;
+  const requestsCount = realConversations.filter((conversation) => conversationInboxBucket(conversation) === 'requests').length;
+  if (views.dmPrimaryCount) views.dmPrimaryCount.textContent = formatCount(primaryCount);
+  if (views.dmRequestsCount) views.dmRequestsCount.textContent = formatCount(requestsCount);
+  if (!['primary', 'requests'].includes(state.conversationFilter)) state.conversationFilter = 'primary';
+
+  const visibleConversations = filterConversationsForInbox(realConversations);
+  const emptyByFilter = {
+    primary: ['No chats yet', 'Open a profile or Discover card to message someone.'],
+    requests: ['No message requests', 'Incoming messages from people you do not follow will appear here.']
+  };
+
+  if (!visibleConversations.length) {
+    const [title, body] = emptyByFilter[state.conversationFilter] || emptyByFilter.primary;
+    views.conversationList.innerHTML = `<div class="dm-empty-state">${emptyState(title, body)}</div>`;
     return;
   }
 
-  views.conversationList.innerHTML = realConversations.map((conversation) => {
+  views.conversationList.innerHTML = visibleConversations.map((conversation) => {
     const other = getOtherMember(conversation);
     const active = conversation.id === state.activeConversationId ? 'active' : '';
+    const unread = conversation.lastSenderId && conversation.lastSenderId !== state.profile.uid ? 'unread' : '';
+    const preview = conversationPreviewText(conversation);
+    const updated = compactTimeAgo(conversation.updatedAt);
+    const activity = other.hideActivity ? '' : activityText(other);
+
     return `
-      <button class="conversation-item ${active}" type="button" data-conversation-id="${escapeHTML(conversation.id)}" data-other-id="${escapeHTML(other.uid)}">
-        ${avatarTemplate(other)}
-        <span class="conversation-copy">
-          <strong>${escapeHTML(other.displayName || 'User')}</strong>
-          <span>${escapeHTML(conversationPreviewText(conversation))}</span>
+      <div class="conversation-item ${active} ${unread}" role="button" tabindex="0" data-conversation-id="${escapeHTML(conversation.id)}" data-other-id="${escapeHTML(other.uid)}">
+        <span class="conversation-avatar-wrap">
+          ${avatarTemplate(other)}
+          ${activity && activity.toLowerCase().includes('online') ? '<span class="conversation-online-dot" aria-hidden="true"></span>' : ''}
         </span>
-      </button>
+        <span class="conversation-copy">
+          <span class="conversation-line">
+            <strong>${escapeHTML(other.displayName || other.username || 'User')}</strong>
+            <small>${escapeHTML(updated)}</small>
+          </span>
+          <span class="conversation-preview">${escapeHTML(preview)}</span>
+        </span>
+        <span class="conversation-side-actions">
+          ${unread ? '<span class="conversation-unread-dot" aria-label="Unread conversation"></span>' : ''}
+          <button class="conversation-camera" type="button" data-start-camera="${escapeHTML(conversation.id)}" aria-label="Open camera for ${escapeHTML(other.displayName || 'user')}">${uiIcon('camera')}</button>
+        </span>
+      </div>
     `;
   }).join('');
 
-  $$('[data-conversation-id]', views.conversationList).forEach((button) => {
-    button.addEventListener('click', async () => {
-      const conversation = state.conversations.find((item) => item.id === button.dataset.conversationId);
+  $$('[data-conversation-id]', views.conversationList).forEach((item) => {
+    const openItem = async () => {
+      const conversation = state.conversations.find((row) => row.id === item.dataset.conversationId);
+      if (!conversation) return;
       const other = getOtherMember(conversation);
       await activateConversation(conversation.id, other);
+    };
+
+    item.addEventListener('click', async (event) => {
+      if (event.target.closest('[data-start-camera]')) return;
+      await openItem();
+    });
+
+    item.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      await openItem();
+    });
+  });
+
+  $$('[data-start-camera]', views.conversationList).forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const conversation = state.conversations.find((row) => row.id === button.dataset.startCamera);
+      if (!conversation) return;
+      const other = getOtherMember(conversation);
+      await activateConversation(conversation.id, other);
+      setTimeout(() => views.messageImageInput?.click(), 120);
     });
   });
 }
@@ -2743,8 +3264,10 @@ async function activateConversation(conversationId, otherUser) {
 
   views.chatEmpty.classList.add('hidden');
   views.chatActive.classList.remove('hidden');
+  $('#messages-view')?.classList.add('chat-open');
 
   views.chatHeader.innerHTML = `
+    <button class="chat-back-btn" type="button" data-chat-back aria-label="Back to inbox">${uiIcon('arrowLeft')}</button>
     <button class="post-author as-button" type="button" data-chat-profile>
       ${avatarTemplate(otherUser)}
       <div class="person-meta">
@@ -2763,6 +3286,7 @@ async function activateConversation(conversationId, otherUser) {
       </div>
     </div>
   `;
+  $('[data-chat-back]', views.chatHeader)?.addEventListener('click', closeMobileConversation);
   $('[data-chat-profile]', views.chatHeader)?.addEventListener('click', () => openUserProfile(otherUser.uid));
   $('[data-chat-menu-toggle]', views.chatHeader)?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -2885,6 +3409,20 @@ function messageTemplate(message) {
   `;
 }
 
+function closeMobileConversation() {
+  $('#messages-view')?.classList.remove('chat-open');
+
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    if (state.unsubscribeMessages) state.unsubscribeMessages();
+    state.unsubscribeMessages = null;
+    state.activeConversationId = null;
+    state.activeChatUser = null;
+    views.chatActive.classList.add('hidden');
+    views.chatEmpty.classList.remove('hidden');
+    renderConversations();
+  }
+}
+
 async function handleClearChat() {
   if (!state.activeConversationId || !window.confirm('Delete this whole chat for everyone?')) return;
   try {
@@ -2893,6 +3431,7 @@ async function handleClearChat() {
     state.activeChatUser = null;
     views.chatActive.classList.add('hidden');
     views.chatEmpty.classList.remove('hidden');
+    $('#messages-view')?.classList.remove('chat-open');
     showToast('Chat deleted.');
   } catch (error) {
     showToast(friendlyError(error), 'error');
@@ -3106,7 +3645,7 @@ function renderSelectedMediaPreview() {
     }
     views.mediaPreview.innerHTML = `<div class="video-shell preview-video"><video src="${url}" playsinline muted preload="metadata" controlslist="nodownload noplaybackrate" disablepictureinpicture oncontextmenu="return false"></video><button class="video-play-btn" type="button" onclick="const v=this.parentElement.querySelector('video'); if(v.paused){v.play();this.textContent='Ⅱ'}else{v.pause();this.textContent='▶'}">▶</button></div><button type="button" data-clear-media>×</button>`;
   } else {
-    views.mediaPreview.innerHTML = `<img src="${url}" alt="Selected media" /><button type="button" data-clear-media>×</button>`;
+    views.mediaPreview.innerHTML = `<img src="${url}" alt="Selected media" decoding="async" /><button type="button" data-clear-media>×</button>`;
   }
 
   $('[data-clear-media]', views.mediaPreview)?.addEventListener('click', () => {

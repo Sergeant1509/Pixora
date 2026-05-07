@@ -163,7 +163,7 @@ export async function unblockUser(profile, targetUser) {
   await deleteDoc(doc(db, 'users', profile.uid, 'blocked', targetUser.uid));
 }
 
-export async function submitReport({ reporter, targetUser, targetComment, post, group, details }) {
+export async function submitReport({ reporter, targetUser, targetComment, post, group, details, targetType }) {
   if (!reporter?.uid || !targetUser?.uid) throw new Error('Report could not be created.');
 
   const safeGroup = REPORT_GROUPS.includes(group) ? group : 'Other';
@@ -173,7 +173,7 @@ export async function submitReport({ reporter, targetUser, targetComment, post, 
     targetUserId: targetUser.uid,
     targetUsername: targetUser.username || '',
     targetDisplayName: targetUser.displayName || '',
-    targetType: targetComment ? 'comment' : 'user',
+    targetType: targetType || (targetComment ? 'comment' : (post?.id ? 'post' : 'user')),
     postId: post?.id || '',
     commentId: targetComment?.id || '',
     reasonGroup: safeGroup,

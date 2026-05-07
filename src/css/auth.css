@@ -346,3 +346,106 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Pixora auth UI polish */
+.auth-screen {
+  width: min(1180px, calc(100% - 28px)) !important;
+}
+
+.brand-line,
+.auth-panel,
+.hero-card,
+.stat-chip,
+.google-btn {
+  transform: translateZ(0);
+}
+
+.auth-panel,
+.hero-card {
+  background: color-mix(in srgb, var(--surface-solid) 82%, transparent) !important;
+  border-color: color-mix(in srgb, var(--border) 74%, transparent) !important;
+  box-shadow: 0 24px 70px color-mix(in srgb, #000 24%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(1.16) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.16) !important;
+}
+
+.auth-panel {
+  border-radius: 32px !important;
+}
+
+.hero-copy h1,
+.auth-panel h2 {
+  letter-spacing: -.08em !important;
+}
+
+.auth-form input,
+.username-input-wrap {
+  min-height: 52px;
+  background: color-mix(in srgb, var(--bg-soft) 78%, transparent) !important;
+  border-color: color-mix(in srgb, var(--border) 80%, transparent) !important;
+}
+
+.auth-form input:focus,
+.username-input-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border)) !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent) !important;
+}
+
+.auth-form .primary-btn,
+.google-btn {
+  min-height: 52px !important;
+  border-radius: 16px !important;
+}
+
+.auth-form .primary-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+}
+
+.google-btn {
+  background: color-mix(in srgb, var(--surface-solid) 70%, transparent) !important;
+}
+
+.username-suggestions button {
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+@media (max-width: 960px) {
+  .auth-screen {
+    min-height: 100dvh !important;
+    padding: 18px 0 !important;
+  }
+
+  .auth-hero {
+    min-height: auto !important;
+  }
+
+  .brand-line {
+    margin-bottom: 2rem !important;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(2.7rem, 13vw, 5rem) !important;
+  }
+
+  .hero-card {
+    margin-top: 1.4rem !important;
+  }
+
+  .auth-panel {
+    padding: 20px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .auth-screen {
+    width: calc(100% - 18px) !important;
+  }
+
+  .auth-panel {
+    border-radius: 26px !important;
+  }
+
+  .auth-form {
+    gap: .85rem !important;
+  }
+}

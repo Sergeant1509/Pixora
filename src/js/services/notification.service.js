@@ -1,6 +1,7 @@
 import {
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -147,6 +148,33 @@ export async function markNotificationsRead(uid) {
     });
   });
   await batch.commit();
+}
+
+
+export async function deleteNotification(uid, notificationId) {
+  if (!uid || !notificationId) return;
+  await deleteDoc(doc(db, 'users', uid, 'notifications', notificationId));
+}
+
+export async function deleteAllNotifications(uid) {
+  if (!uid) return 0;
+
+  let deletedCount = 0;
+
+  while (true) {
+    const notificationsQuery = query(collection(db, 'users', uid, 'notifications'), limit(250));
+    const snapshot = await getDocs(notificationsQuery);
+    if (snapshot.empty) break;
+
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((row) => {
+      batch.delete(row.ref);
+      deletedCount += 1;
+    });
+    await batch.commit();
+  }
+
+  return deletedCount;
 }
 
 export async function markNotificationRead(uid, notificationId) {

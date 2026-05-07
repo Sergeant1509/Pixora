@@ -92,6 +92,10 @@ export async function sendMessage(conversationId, profile, payload = {}) {
   await updateDoc(doc(db, 'conversations', conversationId), {
     lastMessage: conversationPreview({ ...docData, text: safeText }),
     lastType: type,
+    lastSenderId: profile.uid,
+    lastSenderName: profile.displayName || profile.username || 'User',
+    lastSenderUsername: profile.username || '',
+    lastSenderAvatarUrl: profile.avatarUrl || '',
     updatedAt: serverTimestamp()
   });
 }
@@ -148,6 +152,10 @@ function normalizeConversation(conversation = {}) {
     memberInfo: conversation.memberInfo || {},
     lastMessage: conversation.lastMessage || '',
     lastType: conversation.lastType || '',
+    lastSenderId: conversation.lastSenderId || '',
+    lastSenderName: conversation.lastSenderName || '',
+    lastSenderUsername: conversation.lastSenderUsername || '',
+    lastSenderAvatarUrl: conversation.lastSenderAvatarUrl || '',
     createdAt: conversation.createdAt || new Date().toISOString(),
     updatedAt: conversation.updatedAt || conversation.createdAt || new Date().toISOString()
   };

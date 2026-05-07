@@ -2,11 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/pixora-favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/pixora-favicon.svg" />
     <title>Pixora — Social App</title>
+    <meta name="description" content="Pixora social app with posts, reels, stories, messages, search, and profiles." />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://media.giphy.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -91,19 +94,14 @@
           <div class="ig-home-layout">
             <main class="ig-feed-column">
               <section class="stories-strip" aria-label="Stories and quick actions">
-                <button id="create-story-btn" class="story-chip story-create" type="button">
-                  <span class="story-ring story-add">＋</span>
+                <button id="create-story-btn" class="story-chip story-create" type="button" aria-label="Share your story" title="Share your story">
+                  <span class="story-ring story-profile-ring">
+                    <span class="avatar story-avatar-placeholder">＋</span>
+                    <span class="story-plus-badge">＋</span>
+                  </span>
                   <small>Your story</small>
                 </button>
                 <div id="stories-tray" class="stories-tray"></div>
-              </section>
-              <section class="feed-create-prompt glass-card reveal-up">
-                <div>
-                  <span class="muted-label">Create</span>
-                  <h3>Share a post or story</h3>
-                  <p>Open the Create section to publish photos, videos, thoughts, or a quick story.</p>
-                </div>
-                <button class="primary-btn" type="button" data-view-target="create">＋ Create</button>
               </section>
               <div id="posts-list" class="posts-list"></div>
             </main>
@@ -169,7 +167,34 @@
 
         <section id="messages-view" class="view" data-view="messages">
           <div class="messenger glass-card">
-            <aside class="chat-sidebar">
+            <aside class="chat-sidebar" aria-label="Messages inbox">
+              <div class="dm-inbox-head">
+                <div class="dm-account-row">
+                  <button class="dm-icon-btn" type="button" aria-label="Message filters" data-dm-filter-toggle>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h12M4 12h16M4 17h10"/><circle cx="19" cy="7" r="1.5"/><circle cx="7" cy="12" r="1.5"/><circle cx="16" cy="17" r="1.5"/></svg>
+                  </button>
+                  <button id="dm-account-pill" class="dm-account-pill" type="button" aria-label="Open your profile">
+                    <span id="dm-account-name">Pixora</span>
+                    <span class="dm-chevron">⌄</span>
+                    <span class="dm-live-dot" aria-hidden="true"></span>
+                  </button>
+                  <button class="dm-icon-btn dm-hide-mobile" type="button" aria-label="Open explore" data-dm-open-explore>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg>
+                  </button>
+                  <button class="dm-icon-btn dm-compose-btn" type="button" aria-label="Start a new message" data-dm-compose>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>
+                  </button>
+                </div>
+                <div class="dm-location-chip"><span>✈</span><span>Pixora DM</span></div>
+                <label class="dm-search-wrap" aria-label="Search messages">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3"/><circle cx="11" cy="11" r="7"/></svg>
+                  <input id="conversation-search" type="search" placeholder="Search messages" autocomplete="off" />
+                </label>
+                <div class="dm-filter-row" role="tablist" aria-label="Inbox categories">
+                  <button class="dm-filter-chip active" type="button" data-dm-filter="primary">Primary <span id="dm-primary-count" class="dm-filter-count">0</span></button>
+                  <button class="dm-filter-chip" type="button" data-dm-filter="requests">Requests <span id="dm-requests-count" class="dm-filter-count">0</span></button>
+                </div>
+              </div>
               <div class="chat-section-title">Conversations</div>
               <div id="conversation-list" class="conversation-list"></div>
             </aside>
@@ -207,7 +232,10 @@
                 <span class="muted-label">Activity</span>
                 <h2>Notifications</h2>
               </div>
-              <button id="mark-notifications-read" class="ghost-btn" type="button">Mark all read</button>
+              <div class="notification-header-actions">
+                <button id="mark-notifications-read" class="ghost-btn" type="button">Mark all read</button>
+                <button id="delete-notifications" class="ghost-btn danger-ghost" type="button">Delete all</button>
+              </div>
             </div>
             <div id="notifications-list" class="notifications-list"></div>
           </div>
