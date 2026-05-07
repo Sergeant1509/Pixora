@@ -1814,13 +1814,13 @@ function postTemplate(post) {
       </header>
       ${post.content ? `<p class="post-content">${escapeHTML(post.content)}</p>` : ''}
       ${media}
-      <footer class="post-actions">
-        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post>${uiIcon(liked ? 'heartFilled' : 'heart')} <span>${formatCount(post.likeCount)}</span></button>
-        <button class="action-btn" type="button" data-view-likes>Liked by <span>${formatCount(post.likeCount)}</span></button>
-        <button class="action-btn" type="button" data-toggle-comments>${uiIcon('comment')} <span>${formatCount(post.commentCount)}</span></button>
-        <button class="action-btn ${saved ? 'active' : ''}" type="button" data-save-post>${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')} <span>${saved ? 'Saved' : 'Save'}</span></button>
-        <button class="action-btn" type="button" data-share-post>${uiIcon('share')} <span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
+      <footer class="post-actions" aria-label="Post actions">
+        <button class="action-btn ${liked ? 'active' : ''}" type="button" data-like-post aria-label="Like post" title="Like">${uiIcon(liked ? 'heartFilled' : 'heart')} <span>${formatCount(post.likeCount)}</span></button>
+        <button class="action-btn" type="button" data-toggle-comments aria-label="Open comments" title="Comments">${uiIcon('comment')} <span>${formatCount(post.commentCount)}</span></button>
+        <button class="action-btn" type="button" data-share-post aria-label="Share post" title="Share">${uiIcon('share')} <span>${post.shareCount ? formatCount(post.shareCount) : 'Share'}</span></button>
+        <button class="action-btn ${saved ? 'active' : ''}" type="button" data-save-post aria-label="Save post" title="Save">${uiIcon(saved ? 'bookmarkFilled' : 'bookmark')} <span>${saved ? 'Saved' : 'Save'}</span></button>
       </footer>
+      <button class="likes-summary-btn" type="button" data-view-likes>${post.likeCount ? `Liked by <span>${formatCount(post.likeCount)}</span>` : 'Be the first to like this'}</button>
       <section class="comments-panel ${commentsOpen ? 'open' : ''}" data-comments-panel>
         <div class="comments-list" data-comments-list="${escapeHTML(post.id)}"></div>
         <form class="comment-form" data-comment-form>
